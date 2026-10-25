@@ -9,58 +9,47 @@ interface Job {
   job_link: string;
   notes: string;
   status: string;
+  source_table: string;
 }
 
 export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [totalEntries, setTotalEntries] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [selectedCompany, setSelectedCompany] = useState<string>('All');
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [rowsPerPage, setRowsPerPage] = useState<number>(25);
 
-  // Fetch jobs from FastAPI backend
   useEffect(() => {
-    fetch('http://localhost:8000/jobs')
+    const offset = (currentPage - 1) * rowsPerPage;
+    const statusParam = selectedStatus !== 'All' ? `&status=${encodeURIComponent(selectedStatus)}` : '';
+    
+    fetch(`http://localhost:8000/jobs?limit=${rowsPerPage}&offset=${offset}${statusParam}`)
       .then((res) => res.json())
       .then((data) => {
-        console.log("Fetched jobs data:", data);
-        setJobs(data);
+        setJobs(data.items || []);
+        setTotalEntries(data.total || 0);
       })
       .catch((err) => console.error('Error fetching jobs:', err));
-  }, []);
+  }, [currentPage, rowsPerPage, selectedStatus]);
 
-  // Extract unique company list safely for the dropdown filter
-  const uniqueCompanies = ['All', ...Array.from(new Set(jobs.map((job) => job.company).filter(Boolean)))];
-
-  // Filter jobs safely
   const filteredJobs = jobs.filter((job) => {
     const company = job.company || '';
     const position = job.position || '';
     const notes = job.notes || '';
-    const status = job.status || 'Applied'; // Fallback so unassigned jobs still show up
 
-    const matchesSearch =
+    return (
       company.toLowerCase().includes(searchQuery.toLowerCase()) ||
       position.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      notes.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus =
-      selectedStatus === 'All' || status.toLowerCase() === selectedStatus.toLowerCase();
-
-    const matchesCompany =
-      selectedCompany === 'All' || company === selectedCompany;
-
-    return matchesSearch && matchesStatus && matchesCompany;
+      notes.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
-  // Pagination logic
-  const indexOfLastRow = currentPage * rowsPerPage;
-  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentJobs = filteredJobs.slice(indexOfFirstRow, indexOfLastRow);
-  const totalPages = Math.ceil(filteredJobs.length / rowsPerPage) || 1;
+  const totalPages = Math.ceil(totalEntries / rowsPerPage) || 1;
+  const indexOfFirstRow = totalEntries > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0;
+  const indexOfLastRow = Math.min(currentPage * rowsPerPage, totalEntries);
 
   const statuses = [
     'All',
@@ -80,34 +69,15 @@ export default function App() {
           Job Hunt Application Tracker
         </h1>
 
-        {/* Search Bar & Company Filter Row */}
-        <div className="w-full max-w-4xl mx-auto mb-6 flex flex-col sm:flex-row gap-4">
+        {/* Search Bar */}
+        <div className="w-full max-w-2xl mx-auto mb-6">
           <input
             type="text"
             placeholder="Search jobs across company, position, notes..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-
-          {/* Company Filter Dropdown */}
-          <select
-            value={selectedCompany}
-            onChange={(e) => {
-              setSelectedCompany(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {uniqueCompanies.map((company) => (
-              <option key={company} value={company}>
-                {company === 'All' ? 'All Companies' : company}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Status Filter Tabs */}
@@ -133,9 +103,9 @@ export default function App() {
         {/* Pagination Controls Header */}
         <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-4 px-2 text-sm text-gray-700">
           <div>
-            Showing <span className="font-semibold">{filteredJobs.length > 0 ? indexOfFirstRow + 1 : 0}</span> to{' '}
-            <span className="font-semibold">{Math.min(indexOfLastRow, filteredJobs.length)}</span> of{' '}
-            <span className="font-semibold">{filteredJobs.length}</span> entries
+            Showing <span className="font-semibold">{indexOfFirstRow}</span> to{' '}
+            <span className="font-semibold">{indexOfLastRow}</span> of{' '}
+            <span className="font-semibold">{totalEntries}</span> entries
           </div>
 
           <div className="flex items-center gap-2">
@@ -148,10 +118,12 @@ export default function App() {
               }}
               className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
+              <option value={5}>5</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
+              <option value={75}>75</option>
               <option value={100}>100</option>
-              <option value={250}>250</option>
+              <option value={200}>200</option>
               <option value={500}>500</option>
             </select>
           </div>
@@ -162,6 +134,7 @@ export default function App() {
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-100 border-b border-gray-200 text-gray-800">
               <tr>
+                <th className="py-3 px-4 font-semibold w-16 text-center">#</th>
                 <th className="py-3 px-4 font-semibold">Company</th>
                 <th className="py-3 px-4 font-semibold">Position</th>
                 <th className="py-3 px-4 font-semibold">Date Applied</th>
@@ -172,38 +145,42 @@ export default function App() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 text-gray-800">
-              {currentJobs.length > 0 ? (
-                currentJobs.map((job) => (
-                  <tr key={job.id} className="hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium text-gray-900">{job.company}</td>
-                    <td className="py-3 px-4 text-gray-800">{job.position}</td>
-                    <td className="py-3 px-4 text-gray-700">{job.date_applied}</td>
-                    <td className="py-3 px-4 text-gray-700">{job.wfh || '-'}</td>
-                    <td className="py-3 px-4">
-                      {job.job_link ? (
-                        <a
-                          href={job.job_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline font-medium"
-                        >
-                          Link
-                        </a>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-gray-700">{job.notes || '-'}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button className="text-red-600 hover:text-red-800 text-sm font-medium">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
+              {filteredJobs.length > 0 ? (
+                filteredJobs.map((job, idx) => {
+                  const rowNumber = (currentPage - 1) * rowsPerPage + idx + 1;
+                  return (
+                    <tr key={`${job.source_table}-${job.id || idx}`} className="hover:bg-gray-50">
+                      <td className="py-3 px-4 text-center font-medium text-gray-500">{rowNumber}</td>
+                      <td className="py-3 px-4 font-medium text-gray-900">{job.company}</td>
+                      <td className="py-3 px-4 text-gray-800">{job.position}</td>
+                      <td className="py-3 px-4 text-gray-700">{job.date_applied}</td>
+                      <td className="py-3 px-4 text-gray-700">{job.wfh || '-'}</td>
+                      <td className="py-3 px-4">
+                        {job.job_link ? (
+                          <a
+                            href={job.job_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline font-medium"
+                          >
+                            Link
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-gray-700">{job.notes || '-'}</td>
+                      <td className="py-3 px-4 text-right">
+                        <button className="text-red-600 hover:text-red-800 text-sm font-medium">
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-gray-500">
+                  <td colSpan={8} className="py-8 text-center text-gray-500">
                     No jobs found matching your filters.
                   </td>
                 </tr>

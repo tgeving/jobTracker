@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
@@ -7,7 +7,6 @@ from typing import Optional, List, Dict, Any
 
 app = FastAPI(title="Job Tracker API")
 
-# FIX 1: Allow your Vite React frontend port (5173) instead of 8000
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database Connection Helper
 def get_db_connection():
     return psycopg2.connect(
         host="localhost",
@@ -31,7 +29,6 @@ VALID_TABLES = {
     "pending", "no_response", "went_with_another_canidadate", "rejection"
 }
 
-# A clean display-name mapping for your table categories to match frontend tabs
 TABLE_TO_STATUS = {
     "applied": "Applied",
     "i_rejected_them": "I Rejected Them",
@@ -59,27 +56,36 @@ class MoveJobRequest(BaseModel):
     target_table: str
     job_id: int
 
-
-# FIX 2: Added the exact GET /jobs endpoint your React frontend fetches from!
 @app.get("/jobs")
-def get_jobs():
+def get_jobs(
+    status: Optional[str] = Query(None, description="Filter by status label"),
+    limit: int = Query(25, ge=1, le=500),
+    offset: int = Query(0, ge=0)
+):
     conn = get_db_connection()
     cur = conn.cursor()
-    flat_jobs_list = []
+    all_flat_jobs = []
     
     try:
-        for table_name in VALID_TABLES:
+        tables_to_query = VALID_TABLES
+        if status and status != "All":
+            matching_tables = [t for t, label in TABLE_TO_STATUS.items() if label.lower() == status.lower()]
+            if matching_tables:
+                tables_to_query = matching_tables
+
+        for table_name in tables_to_query:
             cur.execute(f"SELECT * FROM {table_name};")
             rows = cur.fetchall()
             status_label = TABLE_TO_STATUS.get(table_name, "Applied")
             
             for row in rows:
                 job_dict = dict(row)
-                # Inject a status field so the frontend tabs/filters can categorize them
                 job_dict["status"] = status_label
-                # Keep track of which table it came from internally if needed
                 job_dict["source_table"] = table_name
-                flat_jobs_list.append(job_dict)
+                all_flat_jobs.append(job_dict)
+                
+        total_count = len(all_flat_jobs)
+        paginated_jobs = all_flat_jobs[offset : offset + limit]
                 
     except Exception as e:
         print(f"Error fetching jobs: {e}")
@@ -88,35 +94,17 @@ def get_jobs():
         cur.close()
         conn.close()
         
-    return flat_jobs_list
-
-
-@app.get("/jobs/all")
-def get_all_jobs():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    all_jobs_data = {}
-    
-    try:
-        for table_name in VALID_TABLES:
-            cur.execute(f"SELECT * FROM {table_name};")
-            rows = cur.fetchall()
-            all_jobs_data[table_name] = rows
-    except Exception as e:
-        print(f"Error fetching all jobs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-        
-    return all_jobs_data
+    return {
+        "total": total_count,
+        "items": paginated_jobs
+    }
 
 @app.post("/jobs/{table_name}")
 def add_job(table_name: str, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
-    data = job.model_dump(exclude_unset=True) # Updated from .dict() for modern Pydantic v2 support
+    data = job.model_dump(exclude_unset=True)
     columns = ", ".join(data.keys())
     values = list(data.values())
     placeholders = ", ".join(["%s"] * len(values))
