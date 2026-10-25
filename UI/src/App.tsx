@@ -1,149 +1,191 @@
 import React, { useState, useEffect } from 'react';
 
-const TABS = [
-  { key: 'applied', label: 'Applied' },
-  { key: 'i_rejected_them', label: 'I Rejected Them' },
-  { key: 'waiting_to_hear_back', label: 'Waiting to Hear Back' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'no_response', label: 'No Response (Ghosted)' },
-  { key: 'went_with_another_canidadate', label: 'Went With Another Candidate' },
-  { key: 'rejection', label: 'Rejection' },
-];
+interface Job {
+  id: number;
+  company: string;
+  position: string;
+  date_applied: string;
+  wfh: string;
+  job_link: string;
+  notes: string;
+  status: string;
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('applied');
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [jobsData, setJobsData] = useState<Record<string, any[]>>({});
-  const [loading, setLoading] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<string>('All');
+  const [selectedCompany, setSelectedCompany] = useState<string>('All');
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(25);
 
-  // Fetch ALL jobs in one clean request on initial page load (prevents ENOBUFS/502 crash)
-  const fetchAllJobs = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/jobs/all');
-      if (!res.ok) throw new Error('Failed to fetch jobs data');
-      const data = await res.json();
-      setJobsData(data || {});
-    } catch (err) {
-      console.error('Failed to fetch jobs', err);
-    }
-    setLoading(false);
-  };
-
+  // Fetch jobs from FastAPI backend
   useEffect(() => {
-    fetchAllJobs();
+    fetch('http://localhost:8000/jobs')
+      .then((res) => res.json())
+      .then((data) => {
+        console.log("Fetched jobs data:", data);
+        setJobs(data);
+      })
+      .catch((err) => console.error('Error fetching jobs:', err));
   }, []);
 
-  const handleMoveJob = async (jobId: number, targetTable: string) => {
-    try {
-      const res = await fetch('/jobs/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_table: activeTab,
-          target_table: targetTable,
-          job_id: jobId,
-        }),
-      });
-      if (res.ok) {
-        fetchAllJobs(); // Refresh all jobs data instantly after moving
-      }
-    } catch (err) {
-      console.error('Failed to move job', err);
-    }
-  };
+  // Extract unique company list safely for the dropdown filter
+  const uniqueCompanies = ['All', ...Array.from(new Set(jobs.map((job) => job.company).filter(Boolean)))];
 
-  const handleDelete = async (jobId: number) => {
-    if (!confirm('Are you sure you want to delete this job?')) return;
-    try {
-      const res = await fetch(`/jobs/${activeTab}/${jobId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        fetchAllJobs(); // Refresh all jobs data instantly after deleting
-      }
-    } catch (err) {
-      console.error('Failed to delete job', err);
-    }
-  };
+  // Filter jobs safely
+  const filteredJobs = jobs.filter((job) => {
+    const company = job.company || '';
+    const position = job.position || '';
+    const notes = job.notes || '';
+    const status = job.status || 'Applied'; // Fallback so unassigned jobs still show up
 
-  // Grab the array for the currently active tab safely
-  const currentTabJobs = jobsData[activeTab] || [];
+    const matchesSearch =
+      company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      position.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      notes.toLowerCase().includes(searchQuery.toLowerCase());
 
-  const filteredJobs = currentTabJobs.filter((job) =>
-    Object.values(job).some((val) =>
-      String(val || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  );
+    const matchesStatus =
+      selectedStatus === 'All' || status.toLowerCase() === selectedStatus.toLowerCase();
+
+    const matchesCompany =
+      selectedCompany === 'All' || company === selectedCompany;
+
+    return matchesSearch && matchesStatus && matchesCompany;
+  });
+
+  // Pagination logic
+  const indexOfLastRow = currentPage * rowsPerPage;
+  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
+  const currentJobs = filteredJobs.slice(indexOfFirstRow, indexOfLastRow);
+  const totalPages = Math.ceil(filteredJobs.length / rowsPerPage) || 1;
+
+  const statuses = [
+    'All',
+    'Applied',
+    'I Rejected Them',
+    'Waiting to Hear Back',
+    'Pending',
+    'No Response (Ghosted)',
+    'Went With Another Candidate',
+    'Rejection',
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6 text-blue-400">Job Hunt Application Tracker</h1>
+    <div className="w-full min-h-screen bg-gray-50 text-gray-900 m-0 p-0">
+      <div className="w-full px-6 py-8">
+        <h1 className="text-4xl font-bold text-center text-gray-900 mb-6">
+          Job Hunt Application Tracker
+        </h1>
 
-        {/* Search Bar */}
-        <div className="mb-6">
+        {/* Search Bar & Company Filter Row */}
+        <div className="w-full max-w-4xl mx-auto mb-6 flex flex-col sm:flex-row gap-4">
           <input
-            id="search-bar"
             type="text"
             placeholder="Search jobs across company, position, notes..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 rounded bg-gray-800 border border-gray-700 focus:outline-none focus:border-blue-500"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+
+          {/* Company Filter Dropdown */}
+          <select
+            value={selectedCompany}
+            onChange={(e) => {
+              setSelectedCompany(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {uniqueCompanies.map((company) => (
+              <option key={company} value={company}>
+                {company === 'All' ? 'All Companies' : company}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 border-b border-gray-700 pb-4 mb-6">
-          {TABS.map((tab) => (
+        {/* Status Filter Tabs */}
+        <div className="flex flex-wrap justify-center gap-2 mb-6">
+          {statuses.map((status) => (
             <button
-              key={tab.key}
-              id={`tab-${tab.key}`}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 rounded font-medium transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+              key={status}
+              onClick={() => {
+                setSelectedStatus(status);
+                setCurrentPage(1);
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedStatus === status
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'bg-white text-gray-800 border border-gray-300 hover:bg-gray-100'
               }`}
             >
-              {tab.label}
+              {status}
             </button>
           ))}
         </div>
 
-        {/* Content Table */}
-        <div className="bg-gray-800 rounded-lg shadow overflow-x-auto border border-gray-700">
-          {loading ? (
-            <div className="p-6 text-center text-gray-400">Loading jobs...</div>
-          ) : filteredJobs.length === 0 ? (
-            <div className="p-6 text-center text-gray-400">No job records found in this section.</div>
-          ) : (
-            <table id={`${activeTab}-table`} className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-700 text-gray-300 text-sm uppercase">
-                  <th className="p-3">Company</th>
-                  <th className="p-3">Position</th>
-                  <th className="p-3">Date Applied</th>
-                  <th className="p-3">WFH</th>
-                  <th className="p-3">Job Link</th>
-                  <th className="p-3">Notes</th>
-                  <th className="p-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700">
-                {filteredJobs.map((job) => (
-                  <tr key={job.id} className="hover:bg-gray-750 transition-colors">
-                    <td className="p-3 font-semibold">{job.company}</td>
-                    <td className="p-3">{job.position}</td>
-                    <td className="p-3">{job.date_applied}</td>
-                    <td className="p-3">{job.wfh}</td>
-                    <td className="p-3">
+        {/* Pagination Controls Header */}
+        <div className="w-full max-w-7xl mx-auto flex justify-between items-center mb-4 px-2 text-sm text-gray-700">
+          <div>
+            Showing <span className="font-semibold">{filteredJobs.length > 0 ? indexOfFirstRow + 1 : 0}</span> to{' '}
+            <span className="font-semibold">{Math.min(indexOfLastRow, filteredJobs.length)}</span> of{' '}
+            <span className="font-semibold">{filteredJobs.length}</span> entries
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span>Rows per page:</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Jobs Table Container */}
+        <div className="w-full bg-white shadow-md rounded-lg overflow-x-auto border border-gray-200 mb-6">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-gray-100 border-b border-gray-200 text-gray-800">
+              <tr>
+                <th className="py-3 px-4 font-semibold">Company</th>
+                <th className="py-3 px-4 font-semibold">Position</th>
+                <th className="py-3 px-4 font-semibold">Date Applied</th>
+                <th className="py-3 px-4 font-semibold">WFH</th>
+                <th className="py-3 px-4 font-semibold">Job Link</th>
+                <th className="py-3 px-4 font-semibold">Notes</th>
+                <th className="py-3 px-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 text-gray-800">
+              {currentJobs.length > 0 ? (
+                currentJobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 font-medium text-gray-900">{job.company}</td>
+                    <td className="py-3 px-4 text-gray-800">{job.position}</td>
+                    <td className="py-3 px-4 text-gray-700">{job.date_applied}</td>
+                    <td className="py-3 px-4 text-gray-700">{job.wfh || '-'}</td>
+                    <td className="py-3 px-4">
                       {job.job_link ? (
                         <a
                           href={job.job_link}
                           target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-400 underline truncate max-w-xs block"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline font-medium"
                         >
                           Link
                         </a>
@@ -151,36 +193,47 @@ export default function App() {
                         '-'
                       )}
                     </td>
-                    <td className="p-3 text-sm text-gray-300 max-w-xs truncate">{job.notes}</td>
-                    <td className="p-3 text-center space-x-2">
-                      {/* Move Job Dropdown */}
-                      <select
-                        className="bg-gray-700 text-xs px-2 py-1 rounded border border-gray-600 text-gray-200"
-                        onChange={(e) => {
-                          if (e.target.value) handleMoveJob(job.id, e.target.value);
-                          e.target.value = ""; // Reset dropdown after selection
-                        }}
-                        defaultValue=""
-                      >
-                        <option value="" disabled>Move to...</option>
-                        {TABS.filter((t) => t.key !== activeTab).map((t) => (
-                          <option key={t.key} value={t.key}>{t.label}</option>
-                        ))}
-                      </select>
-
-                      <button
-                        onClick={() => handleDelete(job.id)}
-                        className="delete-btn bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs"
-                      >
+                    <td className="py-3 px-4 text-gray-700">{job.notes || '-'}</td>
+                    <td className="py-3 px-4 text-right">
+                      <button className="text-red-600 hover:text-red-800 text-sm font-medium">
                         Delete
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
+                    No jobs found matching your filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+
+        {/* Pagination Navigation Footer */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 pb-8">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-700 px-2">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

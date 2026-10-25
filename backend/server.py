@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 app = FastAPI(title="Job Tracker API")
 
+# FIX 1: Allow your Vite React frontend port (5173) instead of 8000
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,6 +31,17 @@ VALID_TABLES = {
     "pending", "no_response", "went_with_another_canidadate", "rejection"
 }
 
+# A clean display-name mapping for your table categories to match frontend tabs
+TABLE_TO_STATUS = {
+    "applied": "Applied",
+    "i_rejected_them": "I Rejected Them",
+    "waiting_to_hear_back": "Waiting to Hear Back",
+    "pending": "Pending",
+    "no_response": "No Response (Ghosted)",
+    "went_with_another_canidadate": "Went With Another Candidate",
+    "rejection": "Rejection"
+}
+
 class JobItem(BaseModel):
     company: Optional[str] = None
     date_applied: Optional[str] = None
@@ -48,6 +60,37 @@ class MoveJobRequest(BaseModel):
     job_id: int
 
 
+# FIX 2: Added the exact GET /jobs endpoint your React frontend fetches from!
+@app.get("/jobs")
+def get_jobs():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    flat_jobs_list = []
+    
+    try:
+        for table_name in VALID_TABLES:
+            cur.execute(f"SELECT * FROM {table_name};")
+            rows = cur.fetchall()
+            status_label = TABLE_TO_STATUS.get(table_name, "Applied")
+            
+            for row in rows:
+                job_dict = dict(row)
+                # Inject a status field so the frontend tabs/filters can categorize them
+                job_dict["status"] = status_label
+                # Keep track of which table it came from internally if needed
+                job_dict["source_table"] = table_name
+                flat_jobs_list.append(job_dict)
+                
+    except Exception as e:
+        print(f"Error fetching jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+        
+    return flat_jobs_list
+
+
 @app.get("/jobs/all")
 def get_all_jobs():
     conn = get_db_connection()
@@ -58,12 +101,7 @@ def get_all_jobs():
         for table_name in VALID_TABLES:
             cur.execute(f"SELECT * FROM {table_name};")
             rows = cur.fetchall()
-            
-            # Optional: convert rows to a list of dicts if your frontend expects objects, 
-            # or keep them as arrays if your frontend parses tuples. 
-            # Assuming standard fetchall tuples/lists:
             all_jobs_data[table_name] = rows
-            
     except Exception as e:
         print(f"Error fetching all jobs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -78,7 +116,7 @@ def add_job(table_name: str, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
-    data = job.dict(exclude_unset=True)
+    data = job.model_dump(exclude_unset=True) # Updated from .dict() for modern Pydantic v2 support
     columns = ", ".join(data.keys())
     values = list(data.values())
     placeholders = ", ".join(["%s"] * len(values))
@@ -98,7 +136,7 @@ def update_job(table_name: str, job_id: int, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
-    data = job.dict(exclude_unset=True)
+    data = job.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
         
@@ -134,24 +172,19 @@ def move_job(req: MoveJobRequest):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Fetch row from source
     cur.execute(f"SELECT * FROM {req.source_table} WHERE id = %s;", (req.job_id,))
     row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    # Remove id from dict for insertion
     row_data = dict(row)
     row_data.pop("id", None)
     
-    # Filter out keys not present in target schema columns if needed, or insert directly
     cols = ", ".join(row_data.keys())
     vals = list(row_data.values())
     placeholders = ", ".join(["%s"] * len(vals))
     
-    # Insert into target
     cur.execute(f"INSERT INTO {req.target_table} ({cols}) VALUES ({placeholders});", vals)
-    # Delete from source
     cur.execute(f"DELETE FROM {req.source_table} WHERE id = %s;", (req.job_id,))
     
     conn.commit()
