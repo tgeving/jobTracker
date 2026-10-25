@@ -3,13 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 app = FastAPI(title="Job Tracker API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,7 +24,6 @@ def get_db_connection():
         cursor_factory=RealDictCursor
     )
 
-# Updated to match your exact database tables
 VALID_TABLES = {
     "applied", 
     "i_rejected_them", 
@@ -33,16 +32,6 @@ VALID_TABLES = {
     "shit_heads_ghosted_me", 
     "assholes_rejected_me", 
     "fuckers"
-}
-
-TABLE_TO_STATUS = {
-    "applied": "Applied",
-    "i_rejected_them": "I Rejected Them",
-    "waiting_to_hear_back": "Waiting to Hear Back",
-    "pending": "Pending",
-    "shit_heads_ghosted_me": "No Response (Ghosted)",
-    "assholes_rejected_me": "Assholes Rejected Me",
-    "fuckers": "Fuckers"
 }
 
 class JobItem(BaseModel):
@@ -62,52 +51,43 @@ class MoveJobRequest(BaseModel):
     target_table: str
     job_id: int
 
-# Updated endpoint to include /api/jobs/{table_name} matching your frontend
 @app.get("/api/jobs/{table_name}")
-def get_jobs_by_table(table_name: str):
+def get_jobs(
+    table_name: str,
+    limit: int = Query(25, ge=1, le=400),
+    offset: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query(None),
+    order: Optional[str] = Query("asc")
+):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
-        
+    
     conn = get_db_connection()
     cur = conn.cursor()
+    
     try:
-        cur.execute(f'SELECT * FROM "{table_name}";')
-        rows = cur.fetchall()
-        status_label = TABLE_TO_STATUS.get(table_name, "Applied")
-        
-        job_list = []
-        for row in rows:
-            job_dict = dict(row)
-            job_dict["status"] = status_label
-            job_dict["source_table"] = table_name
-            job_list.append(job_dict)
-            
-        return job_list
-    except Exception as e:
-        print(f"Error fetching jobs for {table_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
+        cur.execute(f'SELECT COUNT(*) FROM "{table_name}";')
+        count_result = cur.fetchone()
+        total_count = count_result["count"] if count_result else 0
 
-# Keeping legacy /api/jobs route if "All" tab fetches combined records
-@app.get("/api/jobs")
-def get_all_jobs():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    all_flat_jobs = []
-    try:
-        for table_name in VALID_TABLES:
-            cur.execute(f'SELECT * FROM "{table_name}";')
-            rows = cur.fetchall()
-            status_label = TABLE_TO_STATUS.get(table_name, "Applied")
-            for row in rows:
-                job_dict = dict(row)
-                job_dict["status"] = status_label
-                job_dict["source_table"] = table_name
-                all_flat_jobs.append(job_dict)
-        return all_flat_jobs
+        query = f'SELECT * FROM "{table_name}"'
+        
+        allowed_sort_cols = {"company", "position", "date_applied"}
+        if sort_by in allowed_sort_cols:
+            sort_order = "DESC" if order.lower() == "desc" else "ASC"
+            query += f' ORDER BY "{sort_by}" {sort_order} NULLS LAST'
+            
+        query += ' LIMIT %s OFFSET %s;'
+        
+        cur.execute(query, (limit, offset))
+        rows = cur.fetchall()
+        
+        return {
+            "total": total_count,
+            "items": rows
+        }
     except Exception as e:
+        print(f"Error in get_jobs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
@@ -118,10 +98,7 @@ def add_job(table_name: str, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
-    data = job.model_dump(exclude_unset=True)
-    if not data:
-        raise HTTPException(status_code=400, detail="No data provided")
-        
+    data = job.dict(exclude_unset=True)
     columns = ", ".join([f'"{k}"' for k in data.keys()])
     values = list(data.values())
     placeholders = ", ".join(["%s"] * len(values))
@@ -141,7 +118,7 @@ def update_job(table_name: str, job_id: int, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
-    data = job.model_dump(exclude_unset=True)
+    data = job.dict(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
         
@@ -168,3 +145,35 @@ def delete_job(table_name: str, job_id: int):
     cur.close()
     conn.close()
     return {"message": "Job deleted successfully"}
+
+@app.post("/api/jobs/move")
+def move_job(req: MoveJobRequest):
+    if req.source_table not in VALID_TABLES or req.target_table not in VALID_TABLES:
+        raise HTTPException(status_code=400, detail="Invalid table names")
+        
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(f'SELECT * FROM "{req.source_table}" WHERE id = %s;', (req.job_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    row_data = dict(row)
+    row_data.pop("id", None)
+    
+    cols = ", ".join([f'"{k}"' for k in row_data.keys()])
+    vals = list(row_data.values())
+    placeholders = ", ".join(["%s"] * len(vals))
+    
+    cur.execute(f'INSERT INTO "{req.target_table}" ({cols}) VALUES ({placeholders});', vals)
+    cur.execute(f'DELETE FROM "{req.source_table}" WHERE id = %s;', (req.job_id,))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"message": f"Job moved from {req.source_table} to {req.target_table}"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
