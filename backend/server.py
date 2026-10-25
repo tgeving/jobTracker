@@ -9,7 +9,7 @@ app = FastAPI(title="Job Tracker API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,18 +46,11 @@ class JobItem(BaseModel):
     job_link: Optional[str] = None
     no_of_interviews: Optional[str] = None
 
-class MoveJobRequest(BaseModel):
-    source_table: str
-    target_table: str
-    job_id: int
-
 @app.get("/api/jobs/{table_name}")
 def get_jobs(
     table_name: str,
     limit: int = Query(25, ge=1, le=400),
-    offset: int = Query(0, ge=0),
-    sort_by: Optional[str] = Query(None),
-    order: Optional[str] = Query("asc")
+    offset: int = Query(0, ge=0)
 ):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
@@ -70,16 +63,8 @@ def get_jobs(
         count_result = cur.fetchone()
         total_count = count_result["count"] if count_result else 0
 
-        query = f'SELECT * FROM "{table_name}"'
-        
-        allowed_sort_cols = {"company", "position", "date_applied"}
-        if sort_by in allowed_sort_cols:
-            sort_order = "DESC" if order.lower() == "desc" else "ASC"
-            query += f' ORDER BY "{sort_by}" {sort_order} NULLS LAST'
-            
-        query += ' LIMIT %s OFFSET %s;'
-        
-        cur.execute(query, (limit, offset))
+        # Include ctid if no 'id' column exists so we can still track rows for edits/deletes
+        cur.execute(f'SELECT ctid as id, * FROM "{table_name}" LIMIT %s OFFSET %s;', (limit, offset))
         rows = cur.fetchall()
         
         return {
@@ -99,22 +84,26 @@ def add_job(table_name: str, job: JobItem):
         raise HTTPException(status_code=400, detail="Invalid table name")
     
     data = job.dict(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="No data provided to insert")
+
     columns = ", ".join([f'"{k}"' for k in data.keys()])
     values = list(data.values())
     placeholders = ", ".join(["%s"] * len(values))
     
     conn = get_db_connection()
     cur = conn.cursor()
-    query = f'INSERT INTO "{table_name}" ({columns}) VALUES ({placeholders}) RETURNING id;'
+    
+    # Simple insert without expecting a serial 'id' column back
+    query = f'INSERT INTO "{table_name}" ({columns}) VALUES ({placeholders});'
     cur.execute(query, values)
-    new_id = cur.fetchone()["id"]
     conn.commit()
     cur.close()
     conn.close()
-    return {"message": "Job added successfully", "id": new_id}
+    return {"message": "Job added successfully"}
 
-@app.put("/api/jobs/{table_name}/{job_id}")
-def update_job(table_name: str, job_id: int, job: JobItem):
+@app.put("/api/jobs/{table_name}/{row_id}")
+def update_job(table_name: str, row_id: str, job: JobItem):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
     
@@ -123,56 +112,42 @@ def update_job(table_name: str, job_id: int, job: JobItem):
         raise HTTPException(status_code=400, detail="No fields to update")
         
     set_clause = ", ".join([f'"{k}" = %s' for k in data.keys()])
-    values = list(data.values()) + [job_id]
+    values = list(data.values())
     
     conn = get_db_connection()
     cur = conn.cursor()
-    query = f'UPDATE "{table_name}" SET {set_clause} WHERE id = %s;'
+    
+    # Support updating either by standard id or postgres internal ctid
+    if row_id.startswith("("):
+        query = f'UPDATE "{table_name}" SET {set_clause} WHERE ctid = %s;'
+        values.append(row_id)
+    else:
+        query = f'UPDATE "{table_name}" SET {set_clause} WHERE id = %s;'
+        values.append(int(row_id))
+        
     cur.execute(query, values)
     conn.commit()
     cur.close()
     conn.close()
     return {"message": "Job updated successfully"}
 
-@app.delete("/api/jobs/{table_name}/{job_id}")
-def delete_job(table_name: str, job_id: int):
+@app.delete("/api/jobs/{table_name}/{row_id}")
+def delete_job(table_name: str, row_id: str):
     if table_name not in VALID_TABLES:
         raise HTTPException(status_code=400, detail="Invalid table name")
+    
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute(f'DELETE FROM "{table_name}" WHERE id = %s;', (job_id,))
+    
+    if row_id.startswith("("):
+        cur.execute(f'DELETE FROM "{table_name}" WHERE ctid = %s;', (row_id,))
+    else:
+        cur.execute(f'DELETE FROM "{table_name}" WHERE id = %s;', (int(row_id),))
+        
     conn.commit()
     cur.close()
     conn.close()
     return {"message": "Job deleted successfully"}
-
-@app.post("/api/jobs/move")
-def move_job(req: MoveJobRequest):
-    if req.source_table not in VALID_TABLES or req.target_table not in VALID_TABLES:
-        raise HTTPException(status_code=400, detail="Invalid table names")
-        
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute(f'SELECT * FROM "{req.source_table}" WHERE id = %s;', (req.job_id,))
-    row = cur.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Job not found")
-        
-    row_data = dict(row)
-    row_data.pop("id", None)
-    
-    cols = ", ".join([f'"{k}"' for k in row_data.keys()])
-    vals = list(row_data.values())
-    placeholders = ", ".join(["%s"] * len(vals))
-    
-    cur.execute(f'INSERT INTO "{req.target_table}" ({cols}) VALUES ({placeholders});', vals)
-    cur.execute(f'DELETE FROM "{req.source_table}" WHERE id = %s;', (req.job_id,))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    return {"message": f"Job moved from {req.source_table} to {req.target_table}"}
 
 if __name__ == "__main__":
     import uvicorn

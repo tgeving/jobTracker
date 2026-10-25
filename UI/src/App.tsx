@@ -35,16 +35,28 @@ function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState<number>(0);
   
-  // Pagination state (sorting removed)
+  // Pagination state
   const [limit, setLimit] = useState<number>(25);
   const [offset, setOffset] = useState<number>(0);
   
+  // Modal states for Add / Edit
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingJobId, setEditingJobId] = useState<number | null>(null);
+  const [formData, setFormData] = useState<Job>({
+    company: '',
+    position: '',
+    date_applied: '',
+    wfh: 'N/A',
+    job_link: '',
+    notes: ''
+  });
+
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setOffset(0); // Reset page on tab switch
+    setOffset(0);
     fetchJobs(activeEndpoint, limit, 0);
   }, [activeEndpoint, limit]);
 
@@ -53,10 +65,7 @@ function App() {
     setError(null);
     try {
       const response = await axios.get(`http://localhost:8000/api/jobs/${endpoint}`, {
-        params: {
-          limit: currentLimit,
-          offset: currentOffset
-        }
+        params: { limit: currentLimit, offset: currentOffset }
       });
       
       if (Array.isArray(response.data)) {
@@ -80,30 +89,95 @@ function App() {
     fetchJobs(activeEndpoint, limit, newOffset);
   };
 
-  // Filter jobs by search term
+  const handleDelete = async (id?: number) => {
+    if (!id) return;
+    const confirmed = window.confirm("Are you sure you want to delete this job application?");
+    if (!confirmed) return;
+
+    try {
+      await axios.delete(`http://localhost:8000/api/jobs/${activeEndpoint}/${id}`);
+      fetchJobs(activeEndpoint, limit, offset);
+    } catch (err) {
+      alert("Failed to delete job.");
+      console.error(err);
+    }
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingJobId(null);
+    setFormData({
+      company: '',
+      position: '',
+      date_applied: '',
+      wfh: 'N/A',
+      job_link: '',
+      notes: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (job: Job) => {
+    if (!job.id) return;
+    setEditingJobId(job.id);
+    setFormData({
+      company: job.company || '',
+      position: job.position || '',
+      date_applied: job.date_applied || '',
+      wfh: job.wfh || 'N/A',
+      job_link: job.job_link || '',
+      notes: job.notes || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSaveJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingJobId !== null) {
+        // Update existing row
+        await axios.put(`http://localhost:8000/api/jobs/${activeEndpoint}/${editingJobId}`, formData);
+      } else {
+        // Add new row
+        await axios.post(`http://localhost:8000/api/jobs/${activeEndpoint}`, formData);
+      }
+      setIsModalOpen(false);
+      fetchJobs(activeEndpoint, limit, offset);
+    } catch (err) {
+      alert("Failed to save job details.");
+      console.error(err);
+    }
+  };
+
   const filteredJobs = (jobs || []).filter(job => 
     Object.values(job).some(val => 
       String(val || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
 
-  // Enforce frontend slicing to strictly respect rows-per-page selector
   const paginatedJobs = filteredJobs.slice(0, limit);
-
   const totalPages = Math.ceil(totalJobs / limit) || 1;
   const currentPage = Math.floor(offset / limit) + 1;
 
   return (
     <div className="container">
-      <h1>Job Hunt Application Tracker</h1>
+      <h1>JobFinder - Application Tracker</h1>
       
-      <input 
-        type="text" 
-        placeholder="Search jobs across company, position, notes..." 
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="search-bar"
-      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <input 
+          type="text" 
+          placeholder="Search jobs across company, position, notes..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-bar"
+          style={{ flex: 1, marginRight: '15px', marginBottom: 0 }}
+        />
+        <button 
+          onClick={handleOpenAddModal}
+          style={{ padding: '10px 18px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+        >
+          + Add New Job
+        </button>
+      </div>
 
       <div className="tabs">
         {categories.map((cat) => (
@@ -167,7 +241,20 @@ function App() {
                   ) : 'N/A'}
                 </td>
                 <td>{job.notes || 'N/A'}</td>
-                <td>-</td>
+                <td>
+                  <button 
+                    onClick={() => handleOpenEditModal(job)} 
+                    style={{ marginRight: '6px', padding: '4px 8px', cursor: 'pointer', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px' }}
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(job.id)} 
+                    style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#fed7d7', color: '#9b2c2c', border: 'none', borderRadius: '4px' }}
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))
           ) : (
@@ -198,6 +285,90 @@ function App() {
           Next
         </button>
       </div>
+
+      {/* Add / Edit Modal Overlay */}
+      {isModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '450px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+            <h2>{editingJobId !== null ? 'Edit Job' : 'Add New Job'}</h2>
+            <form onSubmit={handleSaveJob}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Company</label>
+                <input 
+                  type="text" 
+                  value={formData.company} 
+                  onChange={(e) => setFormData({...formData, company: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Position</label>
+                <input 
+                  type="text" 
+                  value={formData.position} 
+                  onChange={(e) => setFormData({...formData, position: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Date Applied</label>
+                <input 
+                  type="text" 
+                  value={formData.date_applied} 
+                  onChange={(e) => setFormData({...formData, date_applied: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>WFH</label>
+                <input 
+                  type="text" 
+                  value={formData.wfh} 
+                  onChange={(e) => setFormData({...formData, wfh: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Job Link URL</label>
+                <input 
+                  type="text" 
+                  value={formData.job_link} 
+                  onChange={(e) => setFormData({...formData, job_link: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Notes</label>
+                <textarea 
+                  value={formData.notes} 
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0', height: '80px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  style={{ padding: '8px 14px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ padding: '8px 14px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
