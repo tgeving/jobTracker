@@ -26,8 +26,8 @@ const categories: Category[] = [
   { label: 'Waiting to Hear Back', endpoint: 'waiting_to_hear_back' },
   { label: 'Pending', endpoint: 'pending' },
   { label: 'No Response (Ghosted)', endpoint: 'shit_heads_ghosted_me' },
-  { label: 'Assholes Rejected Me', endpoint: 'assholes_rejected_me' },
-  { label: 'Fuckers', endpoint: 'fuckers' }
+  { label: 'They Rejected Me', endpoint: 'assholes_rejected_me' },
+  { label: 'Disappointed', endpoint: 'fuckers' }
 ];
 
 const paginationOptions = [5, 10, 15, 25, 50, 75, 100, 200, 400];
