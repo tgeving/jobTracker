@@ -8,7 +8,7 @@ interface Category {
 }
 
 interface Job {
-  id?: number;
+  id?: string | number;
   company?: string;
   position?: string;
   date_applied?: string;
@@ -35,13 +35,11 @@ function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState<number>(0);
   
-  // Pagination state
   const [limit, setLimit] = useState<number>(25);
   const [offset, setOffset] = useState<number>(0);
   
-  // Modal states for Add / Edit
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingJobId, setEditingJobId] = useState<number | null>(null);
+  const [editingJobId, setEditingJobId] = useState<string | number | null>(null);
   const [formData, setFormData] = useState<Job>({
     company: '',
     position: '',
@@ -89,7 +87,7 @@ function App() {
     fetchJobs(activeEndpoint, limit, newOffset);
   };
 
-  const handleDelete = async (id?: number) => {
+  const handleDelete = async (id?: string | number) => {
     if (!id) return;
     const confirmed = window.confirm("Are you sure you want to delete this job application?");
     if (!confirmed) return;
@@ -100,6 +98,22 @@ function App() {
     } catch (err) {
       alert("Failed to delete job.");
       console.error(err);
+    }
+  };
+
+  const handleMoveJob = async (job: Job, targetTable: string) => {
+    try {
+      await axios.post('http://localhost:8000/api/jobs/move', {
+        source_table: activeEndpoint,
+        target_table: targetTable,
+        row_id: String(job.id || ''),
+        company: job.company,
+        position: job.position
+      });
+      fetchJobs(activeEndpoint, limit, offset);
+    } catch (err: any) {
+      console.error("Move job failed:", err.response?.data || err.message);
+      alert(`Failed to move job: ${JSON.stringify(err.response?.data || err.message)}`);
     }
   };
 
@@ -134,10 +148,8 @@ function App() {
     e.preventDefault();
     try {
       if (editingJobId !== null) {
-        // Update existing row
         await axios.put(`http://localhost:8000/api/jobs/${activeEndpoint}/${editingJobId}`, formData);
       } else {
-        // Add new row
         await axios.post(`http://localhost:8000/api/jobs/${activeEndpoint}`, formData);
       }
       setIsModalOpen(false);
@@ -242,18 +254,35 @@ function App() {
                 </td>
                 <td>{job.notes || 'N/A'}</td>
                 <td>
-                  <button 
-                    onClick={() => handleOpenEditModal(job)} 
-                    style={{ marginRight: '6px', padding: '4px 8px', cursor: 'pointer', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px' }}
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(job.id)} 
-                    style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#fed7d7', color: '#9b2c2c', border: 'none', borderRadius: '4px' }}
-                  >
-                    Delete
-                  </button>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button 
+                      onClick={() => handleOpenEditModal(job)} 
+                      style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px' }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(job.id)} 
+                      style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#fed7d7', color: '#9b2c2c', border: 'none', borderRadius: '4px' }}
+                    >
+                      Delete
+                    </button>
+                    <select 
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleMoveJob(job, e.target.value);
+                          e.target.value = "";
+                        }
+                      }}
+                      defaultValue=""
+                      style={{ padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                    >
+                      <option value="" disabled>Move to...</option>
+                      {categories.filter(c => c.endpoint !== activeEndpoint).map(cat => (
+                        <option key={cat.endpoint} value={cat.endpoint}>{cat.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </td>
               </tr>
             ))

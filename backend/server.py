@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
@@ -46,6 +46,73 @@ class JobItem(BaseModel):
     job_link: Optional[str] = None
     no_of_interviews: Optional[str] = None
 
+# --- STATIC ROUTE MUST BE PLACED ABOVE DYNAMIC {table_name} ROUTES ---
+@app.post("/api/jobs/move")
+async def move_job(request: Request):
+    body = await request.json()
+    print(">>> SUCCESS: Hit /api/jobs/move endpoint with payload:", body)
+    
+    source_table = body.get("source_table")
+    target_table = body.get("target_table")
+    company = body.get("company")
+    position = body.get("position")
+    row_id = str(body.get("row_id", ""))
+
+    if source_table not in VALID_TABLES or target_table not in VALID_TABLES:
+        print(f"Validation Error: Invalid table names. Source: {source_table}, Target: {target_table}")
+        raise HTTPException(status_code=400, detail=f"Invalid table names: {source_table} -> {target_table}")
+        
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        row = None
+        if company and position:
+            cur.execute(f'SELECT * FROM "{source_table}" WHERE company = %s AND position = %s LIMIT 1;', (company, position))
+            row = cur.fetchone()
+        
+        if not row and row_id:
+            if row_id.startswith("("):
+                cur.execute(f'SELECT * FROM "{source_table}" WHERE ctid = %s::tid;', (row_id,))
+            else:
+                try:
+                    cur.execute(f'SELECT * FROM "{source_table}" WHERE id = %s;', (int(row_id),))
+                except ValueError:
+                    pass
+            row = cur.fetchone()
+
+        if not row:
+            print("Error: Job record not found in database.")
+            raise HTTPException(status_code=404, detail="Job not found")
+            
+        row_data = dict(row)
+        row_data.pop("id", None)
+        row_data.pop("ctid", None)
+        
+        cols = ", ".join([f'"{k}"' for k in row_data.keys()])
+        vals = list(row_data.values())
+        placeholders = ", ".join(["%s"] * len(vals))
+        
+        cur.execute(f'INSERT INTO "{target_table}" ({cols}) VALUES ({placeholders});', vals)
+        
+        if company and position:
+            cur.execute(f'DELETE FROM "{source_table}" WHERE ctid IN (SELECT ctid FROM "{source_table}" WHERE company = %s AND position = %s LIMIT 1);', (company, position))
+        elif row_id.startswith("("):
+            cur.execute(f'DELETE FROM "{source_table}" WHERE ctid = %s::tid;', (row_id,))
+        else:
+            cur.execute(f'DELETE FROM "{source_table}" WHERE id = %s;', (int(row_id),))
+            
+        conn.commit()
+        return {"message": f"Job successfully moved to {target_table}"}
+    except Exception as e:
+        conn.rollback()
+        print(f"CRITICAL Error moving job: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# --- DYNAMIC ROUTES ---
 @app.get("/api/jobs/{table_name}")
 def get_jobs(
     table_name: str,
@@ -53,7 +120,7 @@ def get_jobs(
     offset: int = Query(0, ge=0)
 ):
     if table_name not in VALID_TABLES:
-        raise HTTPException(status_code=400, detail="Invalid table name")
+        raise HTTPException(status_code=400, detail=f"Invalid table name: {table_name}")
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -63,7 +130,6 @@ def get_jobs(
         count_result = cur.fetchone()
         total_count = count_result["count"] if count_result else 0
 
-        # Include ctid if no 'id' column exists so we can still track rows for edits/deletes
         cur.execute(f'SELECT ctid as id, * FROM "{table_name}" LIMIT %s OFFSET %s;', (limit, offset))
         rows = cur.fetchall()
         
@@ -81,7 +147,7 @@ def get_jobs(
 @app.post("/api/jobs/{table_name}")
 def add_job(table_name: str, job: JobItem):
     if table_name not in VALID_TABLES:
-        raise HTTPException(status_code=400, detail="Invalid table name")
+        raise HTTPException(status_code=400, detail=f"Invalid table name: {table_name}")
     
     data = job.dict(exclude_unset=True)
     if not data:
@@ -93,8 +159,6 @@ def add_job(table_name: str, job: JobItem):
     
     conn = get_db_connection()
     cur = conn.cursor()
-    
-    # Simple insert without expecting a serial 'id' column back
     query = f'INSERT INTO "{table_name}" ({columns}) VALUES ({placeholders});'
     cur.execute(query, values)
     conn.commit()
@@ -105,7 +169,7 @@ def add_job(table_name: str, job: JobItem):
 @app.put("/api/jobs/{table_name}/{row_id}")
 def update_job(table_name: str, row_id: str, job: JobItem):
     if table_name not in VALID_TABLES:
-        raise HTTPException(status_code=400, detail="Invalid table name")
+        raise HTTPException(status_code=400, detail=f"Invalid table name: {table_name}")
     
     data = job.dict(exclude_unset=True)
     if not data:
@@ -117,9 +181,8 @@ def update_job(table_name: str, row_id: str, job: JobItem):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Support updating either by standard id or postgres internal ctid
     if row_id.startswith("("):
-        query = f'UPDATE "{table_name}" SET {set_clause} WHERE ctid = %s;'
+        query = f'UPDATE "{table_name}" SET {set_clause} WHERE ctid = %s::tid;'
         values.append(row_id)
     else:
         query = f'UPDATE "{table_name}" SET {set_clause} WHERE id = %s;'
@@ -134,13 +197,13 @@ def update_job(table_name: str, row_id: str, job: JobItem):
 @app.delete("/api/jobs/{table_name}/{row_id}")
 def delete_job(table_name: str, row_id: str):
     if table_name not in VALID_TABLES:
-        raise HTTPException(status_code=400, detail="Invalid table name")
+        raise HTTPException(status_code=400, detail=f"Invalid table name: {table_name}")
     
     conn = get_db_connection()
     cur = conn.cursor()
     
     if row_id.startswith("("):
-        cur.execute(f'DELETE FROM "{table_name}" WHERE ctid = %s;', (row_id,))
+        cur.execute(f'DELETE FROM "{table_name}" WHERE ctid = %s::tid;', (row_id,))
     else:
         cur.execute(f'DELETE FROM "{table_name}" WHERE id = %s;', (int(row_id),))
         
