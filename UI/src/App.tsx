@@ -15,10 +15,12 @@ interface Job {
   wfh?: string;
   job_link?: string;
   notes?: string;
+  table_name?: string;
   [key: string]: any;
 }
 
 const categories: Category[] = [
+  { label: 'All', endpoint: 'all' },
   { label: 'Applied', endpoint: 'applied' },
   { label: 'I Rejected Them', endpoint: 'i_rejected_them' },
   { label: 'Waiting to Hear Back', endpoint: 'waiting_to_hear_back' },
@@ -31,7 +33,7 @@ const categories: Category[] = [
 const paginationOptions = [5, 10, 15, 25, 50, 75, 100, 200, 400];
 
 function App() {
-  const [activeEndpoint, setActiveEndpoint] = useState<string>('applied');
+  const [activeEndpoint, setActiveEndpoint] = useState<string>('all');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState<number>(0);
   
@@ -40,6 +42,8 @@ function App() {
   
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingJobId, setEditingJobId] = useState<string | number | null>(null);
+  const [editingTable, setEditingTable] = useState<string>('applied');
+  
   const [formData, setFormData] = useState<Job>({
     company: '',
     position: '',
@@ -48,6 +52,7 @@ function App() {
     job_link: '',
     notes: ''
   });
+  const [selectedBucket, setSelectedBucket] = useState<string>('applied');
 
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -87,13 +92,14 @@ function App() {
     fetchJobs(activeEndpoint, limit, newOffset);
   };
 
-  const handleDelete = async (id?: string | number) => {
-    if (!id) return;
+  const handleDelete = async (job: Job) => {
+    const targetTable = job.table_name || activeEndpoint;
+    if (!job.id || targetTable === 'all') return;
     const confirmed = window.confirm("Are you sure you want to delete this job application?");
     if (!confirmed) return;
 
     try {
-      await axios.delete(`http://localhost:8000/api/jobs/${activeEndpoint}/${id}`);
+      await axios.delete(`http://localhost:8000/api/jobs/${targetTable}/${job.id}`);
       fetchJobs(activeEndpoint, limit, offset);
     } catch (err) {
       alert("Failed to delete job.");
@@ -102,9 +108,12 @@ function App() {
   };
 
   const handleMoveJob = async (job: Job, targetTable: string) => {
+    const sourceTable = job.table_name || activeEndpoint;
+    if (sourceTable === 'all') return;
+
     try {
       await axios.post('http://localhost:8000/api/jobs/move', {
-        source_table: activeEndpoint,
+        source_table: sourceTable,
         target_table: targetTable,
         row_id: String(job.id || ''),
         company: job.company,
@@ -127,12 +136,14 @@ function App() {
       job_link: '',
       notes: ''
     });
+    setSelectedBucket(activeEndpoint === 'all' ? 'applied' : activeEndpoint);
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (job: Job) => {
     if (!job.id) return;
     setEditingJobId(job.id);
+    setEditingTable(job.table_name || activeEndpoint);
     setFormData({
       company: job.company || '',
       position: job.position || '',
@@ -141,6 +152,7 @@ function App() {
       job_link: job.job_link || '',
       notes: job.notes || ''
     });
+    setSelectedBucket(job.table_name || activeEndpoint);
     setIsModalOpen(true);
   };
 
@@ -148,9 +160,22 @@ function App() {
     e.preventDefault();
     try {
       if (editingJobId !== null) {
-        await axios.put(`http://localhost:8000/api/jobs/${activeEndpoint}/${editingJobId}`, formData);
+        // If editing from 'All' and bucket changed, move or update accordingly
+        if (editingTable !== selectedBucket) {
+          await axios.post('http://localhost:8000/api/jobs/move', {
+            source_table: editingTable,
+            target_table: selectedBucket,
+            row_id: String(editingJobId),
+            company: formData.company,
+            position: formData.position
+          });
+          // Then update the fields
+          await axios.put(`http://localhost:8000/api/jobs/${selectedBucket}/${editingJobId}`, formData);
+        } else {
+          await axios.put(`http://localhost:8000/api/jobs/${editingTable}/${editingJobId}`, formData);
+        }
       } else {
-        await axios.post(`http://localhost:8000/api/jobs/${activeEndpoint}`, formData);
+        await axios.post(`http://localhost:8000/api/jobs/${selectedBucket}`, formData);
       }
       setIsModalOpen(false);
       fetchJobs(activeEndpoint, limit, offset);
@@ -169,6 +194,11 @@ function App() {
   const paginatedJobs = filteredJobs.slice(0, limit);
   const totalPages = Math.ceil(totalJobs / limit) || 1;
   const currentPage = Math.floor(offset / limit) + 1;
+
+  const getBucketLabel = (endpoint?: string) => {
+    const found = categories.find(c => c.endpoint === endpoint);
+    return found ? found.label : endpoint;
+  };
 
   return (
     <div className="container">
@@ -229,6 +259,7 @@ function App() {
         <thead>
           <tr>
             <th>#</th>
+            {activeEndpoint === 'all' && <th>Bucket</th>}
             <th>Company</th>
             <th>Position</th>
             <th>Date Applied</th>
@@ -243,6 +274,9 @@ function App() {
             paginatedJobs.map((job, index) => (
               <tr key={job.id || index}>
                 <td>{offset + index + 1}</td>
+                {activeEndpoint === 'all' && (
+                  <td><span style={{ fontWeight: 'bold', color: '#2b6cb0' }}>{getBucketLabel(job.table_name)}</span></td>
+                )}
                 <td>{job.company || 'N/A'}</td>
                 <td>{job.position || 'N/A'}</td>
                 <td>{job.date_applied || 'N/A'}</td>
@@ -262,7 +296,7 @@ function App() {
                       Edit
                     </button>
                     <button 
-                      onClick={() => handleDelete(job.id)} 
+                      onClick={() => handleDelete(job)} 
                       style={{ padding: '4px 8px', cursor: 'pointer', backgroundColor: '#fed7d7', color: '#9b2c2c', border: 'none', borderRadius: '4px' }}
                     >
                       Delete
@@ -278,7 +312,7 @@ function App() {
                       style={{ padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
                     >
                       <option value="" disabled>Move to...</option>
-                      {categories.filter(c => c.endpoint !== activeEndpoint).map(cat => (
+                      {categories.filter(c => c.endpoint !== 'all' && c.endpoint !== (job.table_name || activeEndpoint)).map(cat => (
                         <option key={cat.endpoint} value={cat.endpoint}>{cat.label}</option>
                       ))}
                     </select>
@@ -289,7 +323,7 @@ function App() {
           ) : (
             !loading && (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center' }}>No jobs found matching your filters.</td>
+                <td colSpan={activeEndpoint === 'all' ? 9 : 8} style={{ textAlign: 'center' }}>No jobs found matching your filters.</td>
               </tr>
             )
           )}
@@ -324,6 +358,18 @@ function App() {
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '450px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
             <h2>{editingJobId !== null ? 'Edit Job' : 'Add New Job'}</h2>
             <form onSubmit={handleSaveJob}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Bucket / Status</label>
+                <select 
+                  value={selectedBucket} 
+                  onChange={(e) => setSelectedBucket(e.target.value)}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0', cursor: 'pointer' }}
+                >
+                  {categories.filter(c => c.endpoint !== 'all').map(cat => (
+                    <option key={cat.endpoint} value={cat.endpoint}>{cat.label}</option>
+                  ))}
+                </select>
+              </div>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Company</label>
                 <input 

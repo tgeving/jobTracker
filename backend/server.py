@@ -46,12 +46,10 @@ class JobItem(BaseModel):
     job_link: Optional[str] = None
     no_of_interviews: Optional[str] = None
 
-# --- STATIC ROUTE MUST BE PLACED ABOVE DYNAMIC {table_name} ROUTES ---
+# --- STATIC ROUTE ---
 @app.post("/api/jobs/move")
 async def move_job(request: Request):
     body = await request.json()
-    print(">>> SUCCESS: Hit /api/jobs/move endpoint with payload:", body)
-    
     source_table = body.get("source_table")
     target_table = body.get("target_table")
     company = body.get("company")
@@ -59,7 +57,6 @@ async def move_job(request: Request):
     row_id = str(body.get("row_id", ""))
 
     if source_table not in VALID_TABLES or target_table not in VALID_TABLES:
-        print(f"Validation Error: Invalid table names. Source: {source_table}, Target: {target_table}")
         raise HTTPException(status_code=400, detail=f"Invalid table names: {source_table} -> {target_table}")
         
     conn = get_db_connection()
@@ -82,7 +79,6 @@ async def move_job(request: Request):
             row = cur.fetchone()
 
         if not row:
-            print("Error: Job record not found in database.")
             raise HTTPException(status_code=404, detail="Job not found")
             
         row_data = dict(row)
@@ -113,6 +109,37 @@ async def move_job(request: Request):
         conn.close()
 
 # --- DYNAMIC ROUTES ---
+@app.get("/api/jobs/all")
+def get_all_jobs(
+    limit: int = Query(25, ge=1, le=400),
+    offset: int = Query(0, ge=0)
+):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        all_rows = []
+        total_count = 0
+        for table in VALID_TABLES:
+            cur.execute(f'SELECT COUNT(*) FROM "{table}";')
+            cnt = cur.fetchone()["count"]
+            total_count += cnt
+            
+            cur.execute(f'SELECT \'{table}\' as table_name, ctid as id, * FROM "{table}";')
+            all_rows.extend(cur.fetchall())
+            
+        # Slice for pagination across aggregated list
+        paginated_rows = all_rows[offset:offset + limit]
+        return {
+            "total": total_count,
+            "items": paginated_rows
+        }
+    except Exception as e:
+        print(f"Error in get_all_jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 @app.get("/api/jobs/{table_name}")
 def get_jobs(
     table_name: str,
@@ -130,7 +157,7 @@ def get_jobs(
         count_result = cur.fetchone()
         total_count = count_result["count"] if count_result else 0
 
-        cur.execute(f'SELECT ctid as id, * FROM "{table_name}" LIMIT %s OFFSET %s;', (limit, offset))
+        cur.execute(f'SELECT \'{table_name}\' as table_name, ctid as id, * FROM "{table_name}" LIMIT %s OFFSET %s;', (limit, offset))
         rows = cur.fetchall()
         
         return {
