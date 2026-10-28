@@ -59,7 +59,7 @@ async function runJobScraper(searchQuery: string) {
       await page.waitForTimeout(2000);
     }
 
-    // 3. Check if standard email/password inputs are now visible (either on page or modal)
+    // 3. Check if standard email/password inputs are visible
     const emailInput = page.locator('input#session_key, input[name="session_key"], input[placeholder="Email or phone"]');
     const passwordInput = page.locator('input#session_password, input[name="session_password"], input[placeholder="Password"]');
     const submitButton = page.locator('button[type="submit"], button:has-text("Sign in")').last();
@@ -76,7 +76,6 @@ async function runJobScraper(searchQuery: string) {
       await submitButton.click();
 
       try {
-        // Wait for the modal or login view to disappear / redirect
         await page.waitForTimeout(5000);
         console.log('✅ Credentials submitted!');
       } catch (err) {
@@ -90,31 +89,31 @@ async function runJobScraper(searchQuery: string) {
     console.log('--- Scraping LinkedIn Jobs ---');
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
 
-    // 5. Process and save jobs to PostgreSQL
+    // 5. Process, check duplicates, and save jobs to PostgreSQL
     for (const job of linkedinJobs) {
-      // Check across tables for duplicates to prevent spamming your database
+      // Explicitly check if the job already exists in new_jobs_found
       const duplicateCheck = `
         SELECT 1 FROM new_jobs_found WHERE company = $1 AND position = $2
-        UNION
-        SELECT 1 FROM applied WHERE company = $1 AND position = $2
-        UNION
-        SELECT 1 FROM waiting_to_hear_back WHERE company = $1 AND position = $2
       `;
       const existing = await client.query(duplicateCheck, [job.company, job.position]);
 
       if (existing.rowCount && existing.rowCount > 0) {
-        console.log(`-> Duplicate skipped: ${job.company} - ${job.position}`);
+        console.log(`-> Duplicate skipped (Already in new_jobs_found): ${job.company} - ${job.position}`);
         continue;
       }
 
-      // Insert into new_jobs_found
-      const insertQuery = `
-        INSERT INTO new_jobs_found (company, position, job_link, wfh)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT DO NOTHING
-      `;
-      await client.query(insertQuery, [job.company, job.position, job.jobLink, job.wfh]);
-      console.log(`-> Saved new job: ${job.company} - ${job.position}`);
+      try {
+        // Insert into new_jobs_found if it doesn't already exist
+        const insertQuery = `
+          INSERT INTO new_jobs_found (company, position, job_link, wfh)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT DO NOTHING
+        `;
+        await client.query(insertQuery, [job.company, job.position, job.jobLink, job.wfh]);
+        console.log(`-> Saved new job: ${job.company} - ${job.position}`);
+      } catch (dbErr) {
+        console.error(`❌ DB Insert Error for ${job.company} - ${job.position}:`, dbErr);
+      }
     }
 
   } catch (err) {
