@@ -1,0 +1,41 @@
+# 🚀 JobFinder - Full-Stack Application Tracker
+
+A modern, full-stack job application tracking web application designed to help engineering professionals manage, filter, and audit their career search pipeline. Built with high performance, clean architecture, and robust automated testing in mind.
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+* **React** (with Vite)
+* **TypeScript** for static typing
+* **Tailwind CSS** for responsive styling
+
+### Backend
+* **Python 3.15**
+* **FastAPI** for high-performance asynchronous REST endpoints
+* **Pydantic** for robust data validation and schema management
+
+### Database & Tooling
+* **PostgreSQL (v18)** for persistent relational storage
+* **DBeaver** for local database administration
+* **Playwright** for end-to-end UI and integration test automation
+
+---
+
+## 📂 Project Structure
+
+```text
+jobTracker/
+│
+├── backend/                  # FastAPI Python Server
+│   ├── main.py               # API routes and server entry point
+│   ├── database.py           # PostgreSQL connection & configuration
+│   └── requirements.txt      # Python dependencies
+│
+├── frontend/                 # React + Vite Client
+│   ├── src/                  # Components, pages, and styling
+│   └── package.json          # Node dependencies
+│
+└── tests/                    # Playwright E2E & Integration Tests
+    └── jobfinder.spec.ts     # Tab, table, and data-flow automation
