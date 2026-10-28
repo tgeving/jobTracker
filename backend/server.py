@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -15,16 +17,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'))
 def get_db_connection():
     return psycopg2.connect(
-        host="localhost",
-        database="postgres",
-        user="jobTracker",
-        password="F1nd@J0b!",
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),          # Pulls DB_USER from your .env
+        password=os.getenv("DB_PASSWORD"),  # Pulls DB_PASSWORD from your .env
+        port=os.getenv("DB_PORT", "5432"),
         cursor_factory=RealDictCursor
-    )
+     )
 
 VALID_TABLES = {
+    "new_jobs_found",
     "applied", 
     "i_rejected_them", 
     "waiting_to_hear_back", 
