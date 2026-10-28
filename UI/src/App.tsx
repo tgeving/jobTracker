@@ -21,6 +21,7 @@ interface Job {
 
 const categories: Category[] = [
   { label: 'All', endpoint: 'all' },
+  { label: 'New Jobs Found', endpoint: 'new_jobs_found' },
   { label: 'Applied', endpoint: 'applied' },
   { label: 'I Rejected Them', endpoint: 'i_rejected_them' },
   { label: 'Waiting to Hear Back', endpoint: 'waiting_to_hear_back' },
@@ -160,7 +161,6 @@ function App() {
     e.preventDefault();
     try {
       if (editingJobId !== null) {
-        // If editing from 'All' and bucket changed, move or update accordingly
         if (editingTable !== selectedBucket) {
           await axios.post('http://localhost:8000/api/jobs/move', {
             source_table: editingTable,
@@ -169,7 +169,6 @@ function App() {
             company: formData.company,
             position: formData.position
           });
-          // Then update the fields
           await axios.put(`http://localhost:8000/api/jobs/${selectedBucket}/${editingJobId}`, formData);
         } else {
           await axios.put(`http://localhost:8000/api/jobs/${editingTable}/${editingJobId}`, formData);

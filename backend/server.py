@@ -239,6 +239,42 @@ def delete_job(table_name: str, row_id: str):
     conn.close()
     return {"message": "Job deleted successfully"}
 
+@app.get("/api/jobs/new_jobs_found")
+def get_new_jobs_found():
+  conn = get_db_connection()
+  cursor = conn.cursor()
+
+  try:
+    # Select only the columns that exist in your new_jobs_found table
+    cursor.execute(
+        "SELECT id, company, position, date_applied, wfh, job_link, notes FROM"
+        " new_jobs_found"
+    )
+    rows = cursor.fetchall()
+
+    jobs = []
+    for row in rows:
+      jobs.append({
+          "id": row[0],
+          "bucket": "New Jobs Found",  # Inject the bucket label for the frontend state
+          "company": row[1],
+          "position": row[2],
+          "date_applied": row[3],
+          "wfh": row[4],
+          "job_link": row[5],
+          "notes": row[6],
+      })
+    return jobs
+  except Exception as e:
+    conn.rollback()
+    raise HTTPException(
+        status_code=400,
+        detail=f"Error fetching from new_jobs_found table: {str(e)}",
+    )
+  finally:
+    cursor.close()
+    conn.close()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
