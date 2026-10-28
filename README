@@ -1,6 +1,6 @@
-# 🚀 JobFinder - Full-Stack Application Tracker
+# 🚀 JobFinder - Full-Stack Application Tracker & Scraper
 
-A modern, full-stack job application tracking web application designed to help engineering professionals manage, filter, and audit their career search pipeline. Built with high performance, clean architecture, and robust automated testing in mind.
+A modern, full-stack job application tracking web application and automated pipeline designed to help engineering professionals manage, filter, and audit their career search pipeline. Built with high performance, clean architecture, and robust automated testing in mind.
 
 ---
 
@@ -11,10 +11,11 @@ A modern, full-stack job application tracking web application designed to help e
 * **TypeScript** for static typing
 * **Tailwind CSS** for responsive styling
 
-### Backend
+### Backend & Scraper
 * **Python 3.15**
 * **FastAPI** for high-performance asynchronous REST endpoints
 * **Pydantic** for robust data validation and schema management
+* **Custom Scraper Automation** for extracting and syncing job listings independently
 
 ### Database & Tooling
 * **PostgreSQL (v18)** for persistent relational storage
@@ -28,10 +29,13 @@ A modern, full-stack job application tracking web application designed to help e
 ```text
 jobTracker/
 │
+├── requirements.txt          # Centralized Python dependencies (Backend & Scraper)
+│
 ├── backend/                  # FastAPI Python Server
-│   ├── main.py               # API routes and server entry point
-│   ├── database.py           # PostgreSQL connection & configuration
-│   └── requirements.txt      # Python dependencies
+│   └── server.py             # API routes, server entry point, and DB connection
+│
+├── scraper/                  # Automated Job Scraper Pipeline
+│   └── scraper.py            # Extraction scripts and data ingestion logic
 │
 ├── frontend/                 # React + Vite Client
 │   ├── src/                  # Components, pages, and styling
@@ -39,3 +43,13 @@ jobTracker/
 │
 └── tests/                    # Playwright E2E & Integration Tests
     └── jobfinder.spec.ts     # Tab, table, and data-flow automation
+
+
+---
+
+# Run by default
+python scraper.py
+
+# Run with custom parameters:
+python scraper.py --target="Senior SDET"
+python scraper.py --target="QA Automation Engineer" --headless=true --limit=50
