@@ -62,7 +62,7 @@ function App() {
   // --- Scraper Modal States ---
   const [isScraperModalOpen, setIsScraperModalOpen] = useState<boolean>(false);
   const [scraperPlatform, setScraperPlatform] = useState<string>('LinkedIn');
-  const [scraperTarget, setScraperTarget] = useState<string>('Backend API SDET Python');
+  const [scraperTarget, setScraperTarget] = useState<string>('Backend API SDET Python Remote');
   const [scraperHeadless, setScraperHeadless] = useState<boolean>(true);
   const [scraperLoading, setScraperLoading] = useState<boolean>(false);
   const [scraperLogs, setScraperLogs] = useState<string | null>(null);
@@ -518,7 +518,7 @@ function App() {
                   type="text" 
                   value={scraperTarget} 
                   onChange={(e) => setScraperTarget(e.target.value)}
-                  placeholder="e.g. Backend API SDET Python"
+                  placeholder="e.g. Backend API SDET Python Remote"
                   required
                   style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
                 />
