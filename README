@@ -72,6 +72,7 @@ npm run dev
 Run the scraper Pipeline via CLI (optional)
 node scraper/jobscraper.js --platform=LinkedIn --target="Senior SDET" --headless=true
 
+```text
 jobTracker/
 │
 ├── requirements.txt          # Centralized Python dependencies (Backend & Scraper)
@@ -92,6 +93,16 @@ jobTracker/
 │   ├── src/                  # Components, pages, and styling
 │   └── package.json          # Node dependencies
 │
-└── tests/                    # Playwright E2E & Integration Tests
-    └── jobTracker.spec.ts    # Tab, table, and data-flow automation
+└── tests/                    # Testing Suite (Pytest & Playwright)
+    ├── API/                  # Backend API tests and test helpers (Pytest)
+    │   └── lib/              # Test utilities, fixtures, and bucket helpers
+    └── UI/                   # UI end-to-end automation specs (Playwright)
+        └── jobTracker.spec.ts # Tab, table, and data-flow automation
 
+## Running Tests
+
+This project uses [Pytest](https://docs.pytest.org/) for backend testing. 
+
+1. Ensure your test environment and dependencies are installed:
+   ```bash
+   pip install -r requirements.txt
