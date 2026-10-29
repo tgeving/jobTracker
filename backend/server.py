@@ -1,4 +1,5 @@
 import os
+import platform
 import subprocess
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -53,21 +54,20 @@ class JobItem(BaseModel):
     job_link: Optional[str] = None
     no_of_interviews: Optional[str] = None
 
-# Pydantic Model for Scraper Request
 class ScraperRequest(BaseModel):
     platform: str
     target: str
     headless: bool = True
 
+active_scraper_process = None
+
 
 # --- SCRAPER EXECUTION ENDPOINT ---
 @app.post("/api/scraper/run")
 def run_job_scraper(payload: ScraperRequest):
+    global active_scraper_process
     try:
-        # Get the root directory (jobTracker/)
         root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        
-        # Points to your compiled Playwright scraper script inside the scraper/ folder
         scraper_path = os.path.join(root_dir, "scraper", "jobscraper.js")
         
         cmd = [
@@ -78,33 +78,71 @@ def run_job_scraper(payload: ScraperRequest):
             f"--headless={str(payload.headless).lower()}"
         ]
         
-        result = subprocess.run(
+        active_scraper_process = subprocess.Popen(
             cmd, 
-            capture_output=True, 
-            text=True, 
-            check=True,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True,
             cwd=root_dir
         )
+        
+        stdout_output = []
+        while True:
+            output = active_scraper_process.stdout.readline()
+            if output == '' and active_scraper_process.poll() is not None:
+                break
+            if output:
+                stdout_output.append(output)
+
+        rc = active_scraper_process.poll()
+        full_stdout = "".join(stdout_output)
+        
+        if rc != 0 and rc is not None:
+            raise HTTPException(
+                status_code=500, 
+                detail="Scraper execution was terminated or failed."
+            )
         
         return {
             "status": "success",
             "message": f"Successfully executed scraper for {payload.platform} targeting '{payload.target}'",
-            "output": result.stdout
+            "output": full_stdout
         }
         
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Scraper execution failed: {e.stderr or e.stdout}"
-        )
     except Exception as ex:
+        if isinstance(ex, HTTPException):
+            raise ex
         raise HTTPException(
             status_code=500, 
-            detail=f"An unexpected error occurred: {str(ex)}"
+            detail=f"Scraper stopped or encountered an error: {str(ex)}"
         )
+    finally:
+        active_scraper_process = None
 
 
-# --- STATIC ROUTE ---
+# --- SCRAPER STOP ENDPOINT (Safely kills ONLY the Playwright scraper instance) ---
+@app.post("/api/scraper/stop")
+def stop_scraper():
+    """Terminates only the active jobscraper process without touching Vite or FastAPI."""
+    global active_scraper_process
+    try:
+        if active_scraper_process and active_scraper_process.poll() is None:
+            active_scraper_process.terminate()
+            active_scraper_process.kill()
+            active_scraper_process = None
+
+        if platform.system() == "Windows":
+            # Target specifically the jobscraper.js execution thread or orphaned playwright browsers
+            subprocess.run(["wmic", "process", "where", "commandline like '%jobscraper.js%'", "call", "terminate"], capture_output=True)
+        else:
+            subprocess.run(["pkill", "-f", "jobscraper.js"], capture_output=True)
+
+        return {"status": "success", "message": "Scraper stopped successfully."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# --- STATIC ROUTE: MOVE JOB ---
 @app.post("/api/jobs/move")
 async def move_job(request: Request):
     body = await request.json()
@@ -166,7 +204,8 @@ async def move_job(request: Request):
         cur.close()
         conn.close()
 
-# --- DYNAMIC ROUTES ---
+
+# --- DYNAMIC ROUTES: GET ALL ---
 @app.get("/api/jobs/all")
 def get_all_jobs(
     limit: int = Query(25, ge=1, le=400),
@@ -197,6 +236,8 @@ def get_all_jobs(
         cur.close()
         conn.close()
 
+
+# --- DYNAMIC ROUTES: GET BY TABLE ---
 @app.get("/api/jobs/{table_name}")
 def get_jobs(
     table_name: str,
@@ -228,6 +269,8 @@ def get_jobs(
         cur.close()
         conn.close()
 
+
+# --- DYNAMIC ROUTES: ADD JOB ---
 @app.post("/api/jobs/{table_name}")
 def add_job(table_name: str, job: JobItem):
     if table_name not in VALID_TABLES:
@@ -250,6 +293,8 @@ def add_job(table_name: str, job: JobItem):
     conn.close()
     return {"message": "Job added successfully"}
 
+
+# --- DYNAMIC ROUTES: UPDATE JOB ---
 @app.put("/api/jobs/{table_name}/{row_id}")
 def update_job(table_name: str, row_id: str, job: JobItem):
     if table_name not in VALID_TABLES:
@@ -278,6 +323,8 @@ def update_job(table_name: str, row_id: str, job: JobItem):
     conn.close()
     return {"message": "Job updated successfully"}
 
+
+# --- DYNAMIC ROUTES: DELETE JOB ---
 @app.delete("/api/jobs/{table_name}/{row_id}")
 def delete_job(table_name: str, row_id: str):
     if table_name not in VALID_TABLES:
@@ -295,6 +342,7 @@ def delete_job(table_name: str, row_id: str):
     cur.close()
     conn.close()
     return {"message": "Job deleted successfully"}
+
 
 if __name__ == "__main__":
     import uvicorn

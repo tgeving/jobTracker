@@ -1,4 +1,4 @@
-# 🚀 JobFinder - Full-Stack Application Tracker & Scraper
+i# 🚀 JobFinder - Full-Stack Application Tracker & Scraper
 
 A modern, full-stack job application tracking web application and automated pipeline designed to help engineering professionals manage, filter, and audit their career search pipeline. Built with high performance, clean architecture, and robust automated testing in mind.
 
@@ -10,23 +10,60 @@ A modern, full-stack job application tracking web application and automated pipe
 * **React** (with Vite)
 * **TypeScript** for static typing
 * **Tailwind CSS** for responsive styling
+* **Axios** for API client communication
 
 ### Backend & Scraper
 * **Python 3.15**
 * **FastAPI** for high-performance asynchronous REST endpoints
 * **Pydantic** for robust data validation and schema management
-* **Custom Scraper Automation** for extracting and syncing job listings independently
+* **TypeScript & Playwright** Custom Scraper Automation for extracting and syncing job listings independently
 
 ### Database & Tooling
 * **PostgreSQL (v18)** for persistent relational storage
 * **DBeaver** for local database administration
-* **Playwright** for end-to-end UI and integration test automation
 
 ---
 
-## 📂 Project Structure
+## ⚙️ Project Setup & Installation
 
-```text
+### 1. Clone the Repository & Configure Environment
+Create your local environment configuration file based on your setup. Create a `.env` file in the root directory:
+```env
+DB_HOST=localhost
+DB_NAME=jobtracker_db
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+DB_PORT=5432
+LINKEDIN_EMAIL=your_email@example.com
+LINKEDIN_PASSWORD=your_password_here
+
+Create a local PostgreSQL databasebase named 'jobtrcker_db'
+Import the schema using:
+psql -U postgres -d jobtracker_db -f db/schema.sql
+
+Install Dependencies
+pip install -r requirements.txt
+
+Install Frontend Node Dependences
+cd frontend
+npm install
+cd ..
+
+Install Playwright Browser Binaries:
+npx playwright install
+
+Runing the Application
+
+Start the FastAPI Backend Server. Runs on http://127.0.0.1:8000
+python backend/server.py
+
+Start the Frontend Development client
+cd frontend
+npm run dev
+
+Run the scraper Pipeline via CLI (optional)
+node scraper/jobscraper.js --platform=LinkedIn --target="Senior SDET" --headless=true
+
 jobTracker/
 │
 ├── requirements.txt          # Centralized Python dependencies (Backend & Scraper)
@@ -34,22 +71,19 @@ jobTracker/
 ├── backend/                  # FastAPI Python Server
 │   └── server.py             # API routes, server entry point, and DB connection
 │
+├── db/
+│   └── schema.sql            # Clean DB schema (structure only, no private user data)
+│
 ├── scraper/                  # Automated Job Scraper Pipeline
-│   └── scraper.py            # Extraction scripts and data ingestion logic
+│   ├── baseScraper.ts        # Extraction scripts and data ingestion logic
+│   ├── jobscraper.ts         # Validates that only new jobs are created that dont exist already across all buckets
+│   ├── linkedInScraper.ts    # Scraps LinkedIn search results (capped at max 4 pages)
+│   └── tsconfig.json         # TypeScript compiler config for scraper
 │
 ├── frontend/                 # React + Vite Client
 │   ├── src/                  # Components, pages, and styling
 │   └── package.json          # Node dependencies
 │
 └── tests/                    # Playwright E2E & Integration Tests
-    └── jobfinder.spec.ts     # Tab, table, and data-flow automation
+    └── jobTracker.spec.ts    # Tab, table, and data-flow automation
 
-
----
-
-# Run by default
-python scraper.py
-
-# Run with custom parameters:
-python scraper.py --target="Senior SDET"
-python scraper.py --target="QA Automation Engineer" --headless=true --limit=50

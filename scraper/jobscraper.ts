@@ -7,7 +7,6 @@ import { scrapeLinkedIn } from './linkedInScraper';
 // Load variables from the root .env file
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-// Configure your PostgreSQL connection using environment variables
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
@@ -23,19 +22,28 @@ export interface ScrapedJob {
   wfh: string;
 }
 
+// All valid buckets/tables to check against existing applications
+const VALID_TABLES = [
+  "new_jobs_found",
+  "applied", 
+  "i_rejected_them", 
+  "waiting_to_hear_back", 
+  "pending", 
+  "shit_heads_ghosted_me", 
+  "assholes_rejected_me", 
+  "fuckers"
+];
+
 async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   console.log(`🚀 Starting Job Scraping Pipeline with query: "${searchQuery}"`);
 
-  // Define a local directory to persist your login session cookies across runs
   const userDataDir = path.join(__dirname, '../my-browser-profile');
 
-  // Launch a persistent browser context so you stay logged in
   const browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless: headlessMode, 
     viewport: { width: 1280, height: 800 },
   });
 
-  // Ensure we only use a single page to prevent duplicate windows
   const pages = browserContext.pages();
   const page = pages.length > 0 ? pages[0] : await browserContext.newPage();
   
@@ -43,7 +51,6 @@ async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   let newJobsSavedCount = 0;
 
   try {
-    // 1. Navigate to LinkedIn Job Search directly with clean query string
     const encodedQuery = encodeURIComponent(searchQuery);
     const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodedQuery}`;
     
@@ -51,60 +58,54 @@ async function runJobScraper(searchQuery: string, headlessMode: boolean) {
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    // 2. Check if the "Sign in to view more jobs" modal popup is blocking the screen
+    // Handle sign-in modal if present
     const signInWithEmailBtn = page.locator('button:has-text("Sign in with Email"), button:has-text("Sign in")').filter({ hasText: /email|sign in/i });
-    
     if (await signInWithEmailBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      console.log('🔑 Sign-in modal detected on page. Clicking "Sign in with Email"...');
       await signInWithEmailBtn.first().click();
       await page.waitForTimeout(2000);
     }
 
-    // 3. Check if standard email/password inputs are visible
     const emailInput = page.locator('input#session_key, input[name="session_key"], input[placeholder="Email or phone"]');
     const passwordInput = page.locator('input#session_password, input[name="session_password"], input[placeholder="Password"]');
     const submitButton = page.locator('button[type="submit"], button:has-text("Sign in")').last();
 
     if (await emailInput.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      console.log('✍️ Filling credentials from .env into login form...');
-
       await emailInput.first().click();
       await emailInput.first().fill(process.env.LINKEDIN_EMAIL || '');
-
       await passwordInput.first().click();
       await passwordInput.first().fill(process.env.LINKEDIN_PASSWORD || '');
-
       await submitButton.click();
-
-      try {
-        await page.waitForTimeout(5000);
-        console.log('✅ Credentials submitted!');
-      } catch (err) {
-        console.log('⚠️ Please complete any manual verification if prompted.');
-      }
-    } else {
-      console.log('✨ Session active or no login fields needed.');
+      await page.waitForTimeout(5000);
     }
 
-    // 4. Run LinkedIn Scraper
-    console.log('--- Scraping LinkedIn Jobs ---');
+    // Run scraper (capped at 4 pages max)
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
+    console.log(`Evaluating ${linkedinJobs.length} scraped jobs against all database buckets...`);
 
-    // 5. Process, check duplicates against new_jobs_found, and save jobs
+    // Process and check duplicates across ALL tables
     for (const job of linkedinJobs) {
-      // Check specifically within the new_jobs_found table
-      const duplicateCheck = `
-        SELECT 1 FROM new_jobs_found 
-        WHERE LOWER(company) = LOWER($1) AND LOWER(position) = LOWER($2) 
-        LIMIT 1
-      `;
-      const existing = await client.query(duplicateCheck, [job.company, job.position]);
+      let existsAnywhere = false;
+      const cleanCompany = job.company.trim().toLowerCase();
+      const cleanPosition = job.position.trim().toLowerCase();
 
-      if (existing.rowCount && existing.rowCount > 0) {
-        console.log(`-> Duplicate skipped (Already in new_jobs_found): ${job.company} - ${job.position}`);
-        continue;
+      // Check every single table for matching company AND position
+      for (const table of VALID_TABLES) {
+        const queryCheck = `
+          SELECT 1 FROM "${table}" 
+          WHERE LOWER(TRIM(company)) = $1 AND LOWER(TRIM(position)) = $2 
+          LIMIT 1
+        `;
+        const res = await client.query(queryCheck, [cleanCompany, cleanPosition]);
+        if (res.rowCount && res.rowCount > 0) {
+          existsAnywhere = true;
+          console.log(`-> Duplicate skipped (Found in table "${table}"): ${job.company} - ${job.position}`);
+          break;
+        }
       }
 
+      if (existsAnywhere) continue;
+
+      // Safe to insert into new_jobs_found since it doesn't exist anywhere else
       try {
         const insertQuery = `
           INSERT INTO new_jobs_found (company, position, job_link, wfh)
@@ -130,7 +131,6 @@ async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   }
 }
 
-// --- Robust CLI Argument Parsing ---
 const args = process.argv.slice(2);
 let targetQuery = 'api automation testing remote';
 let headlessArg = true;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -62,10 +62,12 @@ function App() {
   // --- Scraper Modal States ---
   const [isScraperModalOpen, setIsScraperModalOpen] = useState<boolean>(false);
   const [scraperPlatform, setScraperPlatform] = useState<string>('LinkedIn');
-  const [scraperTarget, setScraperTarget] = useState<string>('Backend API SDET Python Remote');
+  const [scraperTarget, setScraperTarget] = useState<string>('Backend API SDET Python');
   const [scraperHeadless, setScraperHeadless] = useState<boolean>(true);
   const [scraperLoading, setScraperLoading] = useState<boolean>(false);
   const [scraperLogs, setScraperLogs] = useState<string | null>(null);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setOffset(0);
@@ -198,11 +200,15 @@ function App() {
     setScraperLoading(true);
     setScraperLogs(null);
 
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await axios.post('http://localhost:8000/api/scraper/run', {
         platform: scraperPlatform,
         target: scraperTarget,
         headless: scraperHeadless
+      }, {
+        signal: abortControllerRef.current.signal
       });
       
       const rawOutput = response.data.output || '';
@@ -215,10 +221,32 @@ function App() {
       );
       fetchJobs(activeEndpoint, limit, offset);
     } catch (err: any) {
-      setScraperLogs(err.response?.data?.detail || 'Failed to execute scraper.');
+      if (axios.isCancel(err) || err.name === 'CanceledError') {
+        setScraperLogs('Scraper execution stopped by user.');
+      } else {
+        setScraperLogs(err.response?.data?.detail || 'Failed to execute scraper.');
+      }
     } finally {
       setScraperLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  // --- Stop Scraper Handler (Red Button) ---
+  const handleStopScraper = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    try {
+      await axios.post('http://localhost:8000/api/scraper/stop');
+    } catch (e) {
+      console.error("Error stopping scraper on server:", e);
+    }
+
+    setScraperLoading(false);
+    setIsScraperModalOpen(false);
+    setScraperLogs('Scraper execution stopped by user.');
   };
 
   const filteredJobs = (jobs || []).filter(job => 
@@ -518,7 +546,7 @@ function App() {
                   type="text" 
                   value={scraperTarget} 
                   onChange={(e) => setScraperTarget(e.target.value)}
-                  placeholder="e.g. Backend API SDET Python Remote"
+                  placeholder="e.g. Backend API SDET Python"
                   required
                   style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
                 />
@@ -537,8 +565,8 @@ function App() {
               {scraperLogs && (
                 <div style={{ 
                   marginBottom: '15px', padding: '12px', borderRadius: '4px', fontSize: '13px',
-                  backgroundColor: scraperLogs.includes('Failed') ? '#fed7d7' : '#c6f6d5',
-                  color: scraperLogs.includes('Failed') ? '#9b2c2c' : '#22543d',
+                  backgroundColor: scraperLogs.includes('Failed') || scraperLogs.includes('stopped') ? '#fed7d7' : '#c6f6d5',
+                  color: scraperLogs.includes('Failed') || scraperLogs.includes('stopped') ? '#9b2c2c' : '#22543d',
                   whiteSpace: 'pre-wrap',
                   maxHeight: '150px',
                   overflowY: 'auto',
@@ -549,12 +577,13 @@ function App() {
               )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                {/* Red Stop Button */}
                 <button 
                   type="button" 
-                  onClick={() => setIsScraperModalOpen(false)}
-                  style={{ padding: '8px 14px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={handleStopScraper}
+                  style={{ padding: '8px 14px', backgroundColor: '#e53e3e', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                 >
-                  Cancel
+                  Stop
                 </button>
                 <button 
                   type="submit" 
