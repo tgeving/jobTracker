@@ -34,11 +34,13 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
         continue;
       }
 
-      // Clean up the title text and remove duplicate sub-lines/spans
+      // Clean up title text and strip out any trailing sub-lines, accessibility text, or duplicates
       let title = (await titleElement.first().innerText()).trim();
-      title = title.split('\n')[0].trim();
+      title = title.split('\n')[0].replace(/with verification/gi, '').trim();
 
-      const company = (await companyElement.first().innerText()).trim();
+      let company = (await companyElement.first().innerText()).trim();
+      company = company.split('\n')[0].trim();
+
       let jobLink = (await linkElement.first().getAttribute('href')) || '';
 
       // Clean up relative links and query parameters
@@ -48,8 +50,12 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
         jobLink = jobLink.split('?')[0];
       }
 
-      // Avoid duplicates inside the current run batch
-      if (jobs.some(j => j.jobLink === jobLink)) continue;
+      if (!jobLink) continue;
+
+      // Strict de-duplication: Skip if this exact job link or company+position combination is already in our array
+      if (jobs.some(j => j.jobLink === jobLink || (j.company.toLowerCase() === company.toLowerCase() && j.position.toLowerCase() === title.toLowerCase()))) {
+        continue;
+      }
 
       jobs.push({
         company,

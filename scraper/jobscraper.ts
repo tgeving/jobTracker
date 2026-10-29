@@ -90,10 +90,13 @@ async function runJobScraper(searchQuery: string, headlessMode: boolean) {
     console.log('--- Scraping LinkedIn Jobs ---');
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
 
-    // 5. Process, check duplicates, and save jobs to PostgreSQL
+    // 5. Process, check duplicates against new_jobs_found, and save jobs
     for (const job of linkedinJobs) {
+      // Check specifically within the new_jobs_found table
       const duplicateCheck = `
-        SELECT 1 FROM new_jobs_found WHERE company = $1 AND position = $2
+        SELECT 1 FROM new_jobs_found 
+        WHERE LOWER(company) = LOWER($1) AND LOWER(position) = LOWER($2) 
+        LIMIT 1
       `;
       const existing = await client.query(duplicateCheck, [job.company, job.position]);
 
