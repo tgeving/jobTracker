@@ -34,7 +34,10 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
         continue;
       }
 
-      const title = (await titleElement.first().innerText()).trim();
+      // Clean up the title text and remove duplicate sub-lines/spans
+      let title = (await titleElement.first().innerText()).trim();
+      title = title.split('\n')[0].trim();
+
       const company = (await companyElement.first().innerText()).trim();
       let jobLink = (await linkElement.first().getAttribute('href')) || '';
 
