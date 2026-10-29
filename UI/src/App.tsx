@@ -59,6 +59,14 @@ function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // --- Scraper Modal States ---
+  const [isScraperModalOpen, setIsScraperModalOpen] = useState<boolean>(false);
+  const [scraperPlatform, setScraperPlatform] = useState<string>('LinkedIn');
+  const [scraperTarget, setScraperTarget] = useState<string>('Backend API SDET Python');
+  const [scraperHeadless, setScraperHeadless] = useState<boolean>(true);
+  const [scraperLoading, setScraperLoading] = useState<boolean>(false);
+  const [scraperLogs, setScraperLogs] = useState<string | null>(null);
+
   useEffect(() => {
     setOffset(0);
     fetchJobs(activeEndpoint, limit, 0);
@@ -184,6 +192,35 @@ function App() {
     }
   };
 
+  // --- Scraper Execution Handler ---
+  const handleExecuteScraper = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScraperLoading(true);
+    setScraperLogs(null);
+
+    try {
+      const response = await axios.post('http://localhost:8000/api/scraper/run', {
+        platform: scraperPlatform,
+        target: scraperTarget,
+        headless: scraperHeadless
+      });
+      
+      const rawOutput = response.data.output || '';
+      const match = rawOutput.match(/Successfully saved (\d+) new jobs/);
+      const newJobsCount = match ? match[1] : '0';
+
+      setScraperLogs(
+        `Successfully executed scraper for ${scraperPlatform} targeting '${scraperTarget}'.\n` +
+        `Number of new found jobs: ${newJobsCount}`
+      );
+      fetchJobs(activeEndpoint, limit, offset);
+    } catch (err: any) {
+      setScraperLogs(err.response?.data?.detail || 'Failed to execute scraper.');
+    } finally {
+      setScraperLoading(false);
+    }
+  };
+
   const filteredJobs = (jobs || []).filter(job => 
     Object.values(job).some(val => 
       String(val || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -212,12 +249,21 @@ function App() {
           className="search-bar"
           style={{ flex: 1, marginRight: '15px', marginBottom: 0 }}
         />
-        <button 
-          onClick={handleOpenAddModal}
-          style={{ padding: '10px 18px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
-        >
-          + Add New Job
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={handleOpenAddModal}
+            style={{ padding: '10px 18px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            + Add New Job
+          </button>
+          
+          <button 
+            onClick={() => setIsScraperModalOpen(true)}
+            style={{ padding: '10px 18px', backgroundColor: '#38a169', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Run Scraper
+          </button>
+        </div>
       </div>
 
       <div className="tabs">
@@ -437,6 +483,85 @@ function App() {
                   style={{ padding: '8px 14px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                 >
                   Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Scraper Configuration Modal */}
+      {isScraperModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '8px', width: '480px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+            <h2>Configure Automated Scraper</h2>
+            <form onSubmit={handleExecuteScraper}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Target Platform</label>
+                <select 
+                  value={scraperPlatform} 
+                  onChange={(e) => setScraperPlatform(e.target.value)}
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0', cursor: 'pointer' }}
+                >
+                  <option value="LinkedIn">LinkedIn</option>
+                  <option value="CareerBuilder">CareerBuilder</option>
+                  <option value="Indeed">Indeed</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600 }}>Search Parameter / Target Role</label>
+                <input 
+                  type="text" 
+                  value={scraperTarget} 
+                  onChange={(e) => setScraperTarget(e.target.value)}
+                  placeholder="e.g. Backend API SDET Python"
+                  required
+                  style={{ width: '100%', padding: '8px', boxSizing: 'border-box', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input 
+                  type="checkbox" 
+                  id="headlessCheck"
+                  checked={scraperHeadless} 
+                  onChange={(e) => setScraperHeadless(e.target.checked)}
+                />
+                <label htmlFor="headlessCheck" style={{ fontWeight: 500, fontSize: '14px', cursor: 'pointer' }}>Run in headless mode (background)</label>
+              </div>
+
+              {scraperLogs && (
+                <div style={{ 
+                  marginBottom: '15px', padding: '12px', borderRadius: '4px', fontSize: '13px',
+                  backgroundColor: scraperLogs.includes('Failed') ? '#fed7d7' : '#c6f6d5',
+                  color: scraperLogs.includes('Failed') ? '#9b2c2c' : '#22543d',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '150px',
+                  overflowY: 'auto',
+                  fontWeight: 500
+                }}>
+                  {scraperLogs}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setIsScraperModalOpen(false)}
+                  style={{ padding: '8px 14px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={scraperLoading}
+                  style={{ padding: '8px 14px', backgroundColor: '#38a169', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', opacity: scraperLoading ? 0.6 : 1 }}
+                >
+                  {scraperLoading ? 'Executing...' : 'Execute'}
                 </button>
               </div>
             </form>

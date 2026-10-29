@@ -23,7 +23,7 @@ export interface ScrapedJob {
   wfh: string;
 }
 
-async function runJobScraper(searchQuery: string) {
+async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   console.log(`🚀 Starting Job Scraping Pipeline with query: "${searchQuery}"`);
 
   // Define a local directory to persist your login session cookies across runs
@@ -31,7 +31,7 @@ async function runJobScraper(searchQuery: string) {
 
   // Launch a persistent browser context so you stay logged in
   const browserContext = await chromium.launchPersistentContext(userDataDir, {
-    headless: false, // Set to true once you are happy it runs smoothly without manual intervention
+    headless: headlessMode, 
     viewport: { width: 1280, height: 800 },
   });
 
@@ -40,9 +40,10 @@ async function runJobScraper(searchQuery: string) {
   const page = pages.length > 0 ? pages[0] : await browserContext.newPage();
   
   const client = await pool.connect();
+  let newJobsSavedCount = 0;
 
   try {
-    // 1. Navigate to LinkedIn Job Search directly
+    // 1. Navigate to LinkedIn Job Search directly with clean query string
     const encodedQuery = encodeURIComponent(searchQuery);
     const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodedQuery}`;
     
@@ -91,7 +92,6 @@ async function runJobScraper(searchQuery: string) {
 
     // 5. Process, check duplicates, and save jobs to PostgreSQL
     for (const job of linkedinJobs) {
-      // Explicitly check if the job already exists in new_jobs_found
       const duplicateCheck = `
         SELECT 1 FROM new_jobs_found WHERE company = $1 AND position = $2
       `;
@@ -103,7 +103,6 @@ async function runJobScraper(searchQuery: string) {
       }
 
       try {
-        // Insert into new_jobs_found if it doesn't already exist
         const insertQuery = `
           INSERT INTO new_jobs_found (company, position, job_link, wfh)
           VALUES ($1, $2, $3, $4)
@@ -111,6 +110,7 @@ async function runJobScraper(searchQuery: string) {
         `;
         await client.query(insertQuery, [job.company, job.position, job.jobLink, job.wfh]);
         console.log(`-> Saved new job: ${job.company} - ${job.position}`);
+        newJobsSavedCount++;
       } catch (dbErr) {
         console.error(`❌ DB Insert Error for ${job.company} - ${job.position}:`, dbErr);
       }
@@ -122,12 +122,22 @@ async function runJobScraper(searchQuery: string) {
     client.release();
     await browserContext.close();
     await pool.end();
+    console.log(`Successfully saved ${newJobsSavedCount} new jobs to the database.`);
     console.log('🏁 Scraping Pipeline Completed.');
   }
 }
 
-// Grab search query from command line arguments, or fallback to default
+// --- Robust CLI Argument Parsing ---
 const args = process.argv.slice(2);
-const searchQuery = args.length > 0 ? args.join(' ') : 'api automation testing remote';
+let targetQuery = 'api automation testing remote';
+let headlessArg = true;
 
-runJobScraper(searchQuery);
+args.forEach(arg => {
+  if (arg.startsWith('--target=')) {
+    targetQuery = arg.replace('--target=', '').replace(/['"]+/g, '').trim();
+  } else if (arg.startsWith('--headless=')) {
+    headlessArg = arg.replace('--headless=', '').trim() === 'true';
+  }
+});
+
+runJobScraper(targetQuery, headlessArg);

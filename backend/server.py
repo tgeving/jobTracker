@@ -1,4 +1,5 @@
 import os
+import subprocess
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,15 +19,16 @@ app.add_middleware(
 )
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '../.env'))
+
 def get_db_connection():
     return psycopg2.connect(
         host=os.getenv("DB_HOST"),
         database=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),          # Pulls DB_USER from your .env
-        password=os.getenv("DB_PASSWORD"),  # Pulls DB_PASSWORD from your .env
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
         port=os.getenv("DB_PORT", "5432"),
         cursor_factory=RealDictCursor
-     )
+    )
 
 VALID_TABLES = {
     "new_jobs_found",
@@ -50,6 +52,57 @@ class JobItem(BaseModel):
     notes: Optional[str] = None
     job_link: Optional[str] = None
     no_of_interviews: Optional[str] = None
+
+# Pydantic Model for Scraper Request
+class ScraperRequest(BaseModel):
+    platform: str
+    target: str
+    headless: bool = True
+
+
+# --- SCRAPER EXECUTION ENDPOINT ---
+@app.post("/api/scraper/run")
+def run_job_scraper(payload: ScraperRequest):
+    try:
+        # Get the root directory (jobTracker/)
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        
+        # Points to your compiled Playwright scraper script inside the scraper/ folder
+        scraper_path = os.path.join(root_dir, "scraper", "jobscraper.js")
+        
+        cmd = [
+            "node",
+            scraper_path,
+            f"--platform={payload.platform}",
+            f"--target={payload.target}",
+            f"--headless={str(payload.headless).lower()}"
+        ]
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            check=True,
+            cwd=root_dir
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Successfully executed scraper for {payload.platform} targeting '{payload.target}'",
+            "output": result.stdout
+        }
+        
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Scraper execution failed: {e.stderr or e.stdout}"
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"An unexpected error occurred: {str(ex)}"
+        )
+
 
 # --- STATIC ROUTE ---
 @app.post("/api/jobs/move")
@@ -132,7 +185,6 @@ def get_all_jobs(
             cur.execute(f'SELECT \'{table}\' as table_name, ctid as id, * FROM "{table}";')
             all_rows.extend(cur.fetchall())
             
-        # Slice for pagination across aggregated list
         paginated_rows = all_rows[offset:offset + limit]
         return {
             "total": total_count,
@@ -244,42 +296,6 @@ def delete_job(table_name: str, row_id: str):
     conn.close()
     return {"message": "Job deleted successfully"}
 
-@app.get("/api/jobs/new_jobs_found")
-def get_new_jobs_found():
-  conn = get_db_connection()
-  cursor = conn.cursor()
-
-  try:
-    # Select only the columns that exist in your new_jobs_found table
-    cursor.execute(
-        "SELECT id, company, position, date_applied, wfh, job_link, notes FROM"
-        " new_jobs_found"
-    )
-    rows = cursor.fetchall()
-
-    jobs = []
-    for row in rows:
-      jobs.append({
-          "id": row[0],
-          "bucket": "New Jobs Found",  # Inject the bucket label for the frontend state
-          "company": row[1],
-          "position": row[2],
-          "date_applied": row[3],
-          "wfh": row[4],
-          "job_link": row[5],
-          "notes": row[6],
-      })
-    return jobs
-  except Exception as e:
-    conn.rollback()
-    raise HTTPException(
-        status_code=400,
-        detail=f"Error fetching from new_jobs_found table: {str(e)}",
-    )
-  finally:
-    cursor.close()
-    conn.close()
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)

@@ -2,11 +2,7 @@ import { Page } from 'playwright';
 import { ScrapedJob } from './jobscraper';
 
 export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<ScrapedJob[]> {
-  const encodedQuery = encodeURIComponent(searchQuery);
-  const url = `https://www.linkedin.com/jobs/search/?keywords=${encodedQuery}`;
-
-  console.log(`Navigating to: ${url}`);
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  console.log(`--- Scraping LinkedIn Jobs for query: "${searchQuery}" ---`);
 
   // Wait explicitly for the job results list container to appear on the page
   try {
