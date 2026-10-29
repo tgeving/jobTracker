@@ -23,9 +23,9 @@ CREATE TABLE public.applied (
 
 -- Drop table
 
--- DROP TABLE public.assholes_rejected_me;
+-- DROP TABLE public.they_rejected_me;
 
-CREATE TABLE public.assholes_rejected_me (
+CREATE TABLE public.they_rejected_me (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -36,15 +36,15 @@ CREATE TABLE public.assholes_rejected_me (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT assholes_rejected_me_id_not_null NOT NULL id,
-	CONSTRAINT assholes_rejected_me_pkey PRIMARY KEY (id)
+	CONSTRAINT they_rejected_me_id_not_null NOT NULL id,
+	CONSTRAINT they_rejected_me_pkey PRIMARY KEY (id)
 );
 
 -- Drop table
 
--- DROP TABLE public.fuckers;
+-- DROP TABLE public.disappointing;
 
-CREATE TABLE public.fuckers (
+CREATE TABLE public.disappointing (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -55,8 +55,8 @@ CREATE TABLE public.fuckers (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT fuckers_id_not_null NOT NULL id,
-	CONSTRAINT fuckers_pkey PRIMARY KEY (id)
+	CONSTRAINT disappointing_id_not_null NOT NULL id,
+	CONSTRAINT disappointing_pkey PRIMARY KEY (id)
 );
 
 -- Drop table
@@ -120,9 +120,9 @@ CREATE TABLE public.pending (
 
 -- Drop table
 
--- DROP TABLE public.shit_heads_ghosted_me;
+-- DROP TABLE public.they_ghosted_me;
 
-CREATE TABLE public.shit_heads_ghosted_me (
+CREATE TABLE public.they_ghosted_me (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -133,8 +133,8 @@ CREATE TABLE public.shit_heads_ghosted_me (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT shit_heads_ghosted_me_id_not_null NOT NULL id,
-	CONSTRAINT shit_heads_ghosted_me_pkey PRIMARY KEY (id)
+	CONSTRAINT they_ghosted_me_id_not_null NOT NULL id,
+	CONSTRAINT they_ghosted_me_pkey PRIMARY KEY (id)
 );
 
 -- Drop table
