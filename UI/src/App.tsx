@@ -50,24 +50,30 @@ export default function App() {
     fetchJobs(selectedBucket);
   }, [selectedBucket]);
 
-  // --- ACTIONS ---
+  // --- API ACTIONS ---
   const handleMoveJob = async (job: any, targetTable: string) => {
     try {
+      const sourceTable = job.table_name || (selectedBucket === 'all' ? 'new_jobs_found' : selectedBucket);
+      
       const res = await fetch('http://localhost:8000/api/jobs/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source_table: job.table_name || selectedBucket,
+          source_table: sourceTable,
           target_table: targetTable,
-          company: job.company,
-          position: job.position,
+          company: job.company || '',
+          position: job.position || '',
           row_id: String(job.id)
         }),
       });
-      if (!res.ok) throw new Error('Failed to move job');
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to move job');
+      
       fetchJobs(selectedBucket);
     } catch (err) {
       console.error(err);
+      alert(`Error moving job: ${err}`);
     }
   };
 
@@ -199,7 +205,7 @@ export default function App() {
       {showJobModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>{isEditing ? 'Edit Job Record' : 'Add New Job Record'}</h3>
+            <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>{isEditing ? 'Edit Job Record' : 'Add New Job Record'}</h3>
             <form onSubmit={handleSaveJob} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <input type="text" placeholder="Company *" value={jobForm.company} onChange={(e) => setJobForm({...jobForm, company: e.target.value})} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
               <input type="text" placeholder="Position *" value={jobForm.position} onChange={(e) => setJobForm({...jobForm, position: e.target.value})} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
@@ -220,17 +226,17 @@ export default function App() {
       {showScraperModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Run Job Scraper</h3>
+            <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>Run Job Scraper</h3>
             <form onSubmit={handleRunScraper} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Platform</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#0f172a' }}>Platform</label>
                 <select value={scraperPlatform} onChange={(e) => setScraperPlatform(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
                   <option value="linkedin">LinkedIn</option>
                   <option value="indeed">Indeed</option>
                 </select>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Search Target</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#0f172a' }}>Search Target</label>
                 <input 
                   type="text" 
                   placeholder="e.g. SDET or Senior QA Engineer" 
@@ -278,6 +284,7 @@ export default function App() {
               <th>Position</th>
               <th>Date Applied</th>
               <th>WFH</th>
+              <th>Link</th>
               <th>Notes</th>
               <th>Move to</th>
               <th>Actions</th>
@@ -290,6 +297,20 @@ export default function App() {
                 <td>{job.position}</td>
                 <td>{job.date_applied}</td>
                 <td>{job.wfh}</td>
+                <td>
+                  {job.job_link ? (
+                    <a 
+                      href={job.job_link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500 }}
+                    >
+                      View Link
+                    </a>
+                  ) : (
+                    <span style={{ color: '#94a3b8' }}>N/A</span>
+                  )}
+                </td>
                 <td>{job.notes}</td>
                 <td>
                   <select 
@@ -302,14 +323,13 @@ export default function App() {
                     }}
                   >
                     <option value="" disabled>Move to...</option>
-                    <option value="new_jobs_found">New Jobs Found</option>
-                    <option value="applied">Applied</option>
-                    <option value="waiting_to_hear_back">Waiting to Hear Back</option>
-                    <option value="pending">Pending</option>
-                    <option value="i_rejected_them">I Rejected Them</option>
-                    <option value="they_ghosted_me">They Ghosted Me</option>
-                    <option value="they_rejected_me">They Rejected Me</option>
-                    <option value="disappointing">Disappointing</option>
+                    {Object.entries(JobBuckets)
+                      .filter(([_, tableKey]) => tableKey !== 'all')
+                      .map(([label, tableKey]) => (
+                        <option key={tableKey} value={tableKey}>
+                          {label.replace(/([A-Z])/g, ' $1').trim()}
+                        </option>
+                      ))}
                   </select>
                 </td>
                 <td>
