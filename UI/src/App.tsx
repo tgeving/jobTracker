@@ -183,7 +183,7 @@ export default function App() {
           onClick={handleOpenAddModal} 
           style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
         >
-          + Add New Job
+          Add New Job
         </button>
 
         <button 
