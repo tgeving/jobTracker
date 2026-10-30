@@ -3,7 +3,7 @@ import { JobBuckets } from './constants/buckets';
 
 export default function App() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
-  const [allJobsCache, setAllJobsCache] = useState<any[]>([]); // <--- Stores global pool for searching across all buckets
+  const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
   const [selectedBucket, setSelectedBucket] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -35,10 +35,9 @@ export default function App() {
   const [scraperTarget, setScraperTarget] = useState('');
   const [scraping, setScraping] = useState(false);
 
-  // Fetch current view data & cache the global "all" list for searching
   const fetchJobs = (bucketKey: string) => {
     setLoading(true);
-    setCurrentPage(1); // Reset to page 1 on tab change
+    setCurrentPage(1);
     
     const endpoint = bucketKey === 'all'
       ? 'http://localhost:8000/api/jobs/all'
@@ -55,18 +54,11 @@ export default function App() {
         setLoading(false);
       });
 
-    // Also fetch the global cache if we aren't already on 'all', so global search has everything
-    if (bucketKey !== 'all') {
-      fetch('http://localhost:8000/api/jobs/all')
-        .then((res) => res.json())
-        .then((data) => setAllJobsCache(data.items))
-        .catch((err) => console.error('Failed to fetch global cache:', err));
-    } else {
-      fetch('http://localhost:8000/api/jobs/all')
-        .then((res) => res.json())
-        .then((data) => setAllJobsCache(data.items))
-        .catch((err) => console.error('Failed to fetch global cache:', err));
-    }
+    // Fetch global cache for searching across all buckets
+    fetch('http://localhost:8000/api/jobs/all')
+      .then((res) => res.json())
+      .then((data) => setAllJobsCache(data.items))
+      .catch((err) => console.error('Failed to fetch global cache:', err));
   };
 
   useEffect(() => {
@@ -201,17 +193,19 @@ export default function App() {
     }
   };
 
-  // 1. GLOBAL SEARCH LOGIC: If an active search term exists, search across the entire global cache. Otherwise, use current tab.
+  // 1. GLOBAL SEARCH LOGIC (ensuring newest items stay on top)
   const sourceDataset = activeSearchTerm ? allJobsCache : jobData.items;
 
-  const filteredItems = sourceDataset.filter((job) => {
-    const query = activeSearchTerm.toLowerCase();
-    if (!query) return true;
-    const company = (job.company || '').toLowerCase();
-    const position = (job.position || '').toLowerCase();
-    const notes = (job.notes || '').toLowerCase();
-    return company.includes(query) || position.includes(query) || notes.includes(query);
-  });
+  const filteredItems = sourceDataset
+    .filter((job) => {
+      const query = activeSearchTerm.toLowerCase();
+      if (!query) return true;
+      const company = (job.company || '').toLowerCase();
+      const position = (job.position || '').toLowerCase();
+      const notes = (job.notes || '').toLowerCase();
+      return company.includes(query) || position.includes(query) || notes.includes(query);
+    })
+    .sort((a, b) => b.id - a.id); // Ensure descending order (newest first)
 
   // 2. Pagination Calculations
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage) || 1;
@@ -387,7 +381,7 @@ export default function App() {
             className={selectedBucket === tableKey ? 'active' : ''}
             onClick={() => {
               setSelectedBucket(tableKey);
-              setActiveSearchTerm(''); // Clear search on tab switch if desired, or keep it active
+              setActiveSearchTerm('');
               setSearchQuery('');
             }}
           >

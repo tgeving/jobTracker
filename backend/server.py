@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from datetime import date
 import os
 from dotenv import load_dotenv
 
@@ -67,9 +68,13 @@ def get_all_jobs():
     
     try:
         for table in VALID_TABLES:
-            cursor.execute(f"SELECT *, '{table}' as table_name FROM {table};")
+            # Order by id DESC to get most recent first across all tables
+            cursor.execute(f"SELECT *, '{table}' as table_name FROM {table} ORDER BY id DESC;")
             rows = cursor.fetchall()
             all_items.extend(rows)
+            
+        # Sort combined list by ID descending so newest overall appear at the top of 'all'
+        all_items.sort(key=lambda x: x["id"], reverse=True)
         return {"total": len(all_items), "items": all_items}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -85,7 +90,8 @@ def get_jobs_by_table(table_name: str):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute(f"SELECT *, '{table_name}' as table_name FROM {table_name};")
+        # Order by id DESC so most recent records appear at the top
+        cursor.execute(f"SELECT *, '{table_name}' as table_name FROM {table_name} ORDER BY id DESC;")
         rows = cursor.fetchall()
         return {"total": len(rows), "items": rows}
     except Exception as e:
@@ -108,12 +114,17 @@ def move_job(data: MoveJobModel):
         if not row:
             raise HTTPException(status_code=404, detail="Job record not found in source table")
 
+        # Automatically stamp today's date if moving to 'applied' and date_applied is empty/blank
+        final_date_applied = row["date_applied"]
+        if data.target_table == "applied" and (not final_date_applied or final_date_applied.strip() == ""):
+            final_date_applied = date.today().isoformat()
+
         cursor.execute(
             f"""
             INSERT INTO {data.target_table} (company, position, date_applied, wfh, notes, job_link)
             VALUES (%s, %s, %s, %s, %s, %s);
             """,
-            (row["company"], row["position"], row["date_applied"], row["wfh"], row["notes"], row["job_link"])
+            (row["company"], row["position"], final_date_applied, row["wfh"], row["notes"], row["job_link"])
         )
 
         cursor.execute(f"DELETE FROM {data.source_table} WHERE id = %s;", (data.row_id,))
