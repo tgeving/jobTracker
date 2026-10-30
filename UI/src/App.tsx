@@ -3,8 +3,15 @@ import { JobBuckets } from './constants/buckets';
 
 export default function App() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
+  const [allJobsCache, setAllJobsCache] = useState<any[]>([]); // <--- Stores global pool for searching across all buckets
   const [selectedBucket, setSelectedBucket] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Modal Visibility States
   const [showJobModal, setShowJobModal] = useState(false);
@@ -28,8 +35,11 @@ export default function App() {
   const [scraperTarget, setScraperTarget] = useState('');
   const [scraping, setScraping] = useState(false);
 
+  // Fetch current view data & cache the global "all" list for searching
   const fetchJobs = (bucketKey: string) => {
     setLoading(true);
+    setCurrentPage(1); // Reset to page 1 on tab change
+    
     const endpoint = bucketKey === 'all'
       ? 'http://localhost:8000/api/jobs/all'
       : `http://localhost:8000/api/jobs/${bucketKey}`;
@@ -44,6 +54,19 @@ export default function App() {
         console.error('Failed to fetch jobs:', err);
         setLoading(false);
       });
+
+    // Also fetch the global cache if we aren't already on 'all', so global search has everything
+    if (bucketKey !== 'all') {
+      fetch('http://localhost:8000/api/jobs/all')
+        .then((res) => res.json())
+        .then((data) => setAllJobsCache(data.items))
+        .catch((err) => console.error('Failed to fetch global cache:', err));
+    } else {
+      fetch('http://localhost:8000/api/jobs/all')
+        .then((res) => res.json())
+        .then((data) => setAllJobsCache(data.items))
+        .catch((err) => console.error('Failed to fetch global cache:', err));
+    }
   };
 
   useEffect(() => {
@@ -178,11 +201,73 @@ export default function App() {
     }
   };
 
+  // 1. GLOBAL SEARCH LOGIC: If an active search term exists, search across the entire global cache. Otherwise, use current tab.
+  const sourceDataset = activeSearchTerm ? allJobsCache : jobData.items;
+
+  const filteredItems = sourceDataset.filter((job) => {
+    const query = activeSearchTerm.toLowerCase();
+    if (!query) return true;
+    const company = (job.company || '').toLowerCase();
+    const position = (job.position || '').toLowerCase();
+    const notes = (job.notes || '').toLowerCase();
+    return company.includes(query) || position.includes(query) || notes.includes(query);
+  });
+
+  // 2. Pagination Calculations
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentTableItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reusable Pagination Component Bar
+  const renderPaginationBar = () => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button 
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+          style={{ background: currentPage === 1 ? '#cbd5e1' : '#2563eb', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
+        >
+          Previous
+        </button>
+
+        <span>Page {currentPage} of {totalPages}</span>
+
+        <button 
+          type="button"
+          disabled={currentPage >= totalPages}
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+          style={{ background: currentPage >= totalPages ? '#cbd5e1' : '#2563eb', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer' }}
+        >
+          Next
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#334155' }}>
+        <label>Rows per page:</label>
+        <select 
+          value={itemsPerPage} 
+          onChange={(e) => {
+            setItemsPerPage(Number(e.target.value));
+            setCurrentPage(1);
+          }}
+          style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}
+        >
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={75}>75</option>
+          <option value={100}>100</option>
+          <option value={200}>200</option>
+        </select>
+      </div>
+    </div>
+  );
+
   return (
     <div className="container">
       <h1>JobFinder - Application Tracker</h1>
 
-      {/* Top Toolbar Trigger Buttons */}
+      {/* Top Toolbar Trigger Buttons & Global Search Bar */}
       <div className="toolbar" style={{ marginBottom: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button 
           type="button" 
@@ -191,6 +276,42 @@ export default function App() {
         >
           Add New Job
         </button>
+
+        {/* Search Input & Execute Search Button Group */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input 
+            type="text" 
+            placeholder="Search all buckets (company, position, notes)..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { 
+              if (e.key === 'Enter') {
+                setActiveSearchTerm(searchQuery);
+                setCurrentPage(1);
+              } 
+            }}
+            style={{ padding: '9px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '300px', fontSize: '14px' }}
+          />
+          <button 
+            type="button"
+            onClick={() => {
+              setActiveSearchTerm(searchQuery);
+              setCurrentPage(1);
+            }}
+            style={{ background: '#475569', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+          >
+            Search
+          </button>
+          {activeSearchTerm && (
+            <button 
+              type="button"
+              onClick={() => { setSearchQuery(''); setActiveSearchTerm(''); setCurrentPage(1); }}
+              style={{ background: '#e2e8f0', color: '#334155', border: 'none', padding: '9px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
 
         <button 
           type="button" 
@@ -264,96 +385,117 @@ export default function App() {
             key={tableKey}
             type="button"
             className={selectedBucket === tableKey ? 'active' : ''}
-            onClick={() => setSelectedBucket(tableKey)}
+            onClick={() => {
+              setSelectedBucket(tableKey);
+              setActiveSearchTerm(''); // Clear search on tab switch if desired, or keep it active
+              setSearchQuery('');
+            }}
           >
             {label.replace(/([A-Z])/g, ' $1').trim()}
           </button>
         ))}
       </div>
 
-      <p className="counter">Showing {jobData.total} entries from PostgreSQL!</p>
+      <p className="counter">
+        Showing entries {filteredItems.length > 0 ? startIndex + 1 : 0} - {Math.min(startIndex + itemsPerPage, filteredItems.length)} of {filteredItems.length} matching entries (Total: {jobData.total})
+      </p>
 
       {/* Loading & Data Table */}
       {loading ? (
         <p>Loading database records...</p>
       ) : (
-        <table className="job-table">
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Position</th>
-              <th>Date Applied</th>
-              <th>WFH</th>
-              <th>Link</th>
-              <th>Notes</th>
-              <th>Move to</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobData.items.map((job, index) => (
-              <tr key={job.id || index}>
-                <td>{job.company}</td>
-                <td>{job.position}</td>
-                <td>{job.date_applied}</td>
-                <td>{job.wfh}</td>
-                <td>
-                  {job.job_link ? (
-                    <a 
-                      href={job.job_link} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500 }}
-                    >
-                      View Link
-                    </a>
-                  ) : (
-                    <span style={{ color: '#94a3b8' }}>N/A</span>
-                  )}
-                </td>
-                <td>{job.notes}</td>
-                <td>
-                  <select 
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleMoveJob(job, e.target.value);
-                        e.target.value = "";
-                      }
-                    }}
-                  >
-                    <option value="" disabled>Move to...</option>
-                    {Object.entries(JobBuckets)
-                      .filter(([_, tableKey]) => tableKey !== 'all')
-                      .map(([label, tableKey]) => (
-                        <option key={tableKey} value={tableKey}>
-                          {label.replace(/([A-Z])/g, ' $1').trim()}
-                        </option>
-                      ))}
-                  </select>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <button 
-                      type="button" 
-                      onClick={() => handleOpenEditModal(job)} 
-                      style={{ background: '#f59e0b', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => handleDeleteJob(job)} 
-                      style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
+        <>
+          {/* TOP PAGINATION BAR */}
+          {renderPaginationBar()}
+
+          <table className="job-table">
+            <thead>
+              <tr>
+                <th style={{ width: '50px', textAlign: 'center' }}>#</th>
+                <th>Company</th>
+                <th>Position</th>
+                <th>Date Applied</th>
+                <th>WFH</th>
+                <th>Link</th>
+                <th>Notes</th>
+                <th>Move to</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {currentTableItems.map((job, index) => {
+                const rowNumber = startIndex + index + 1;
+                return (
+                  <tr key={job.id || index}>
+                    <td style={{ textAlign: 'center', color: '#64748b', fontWeight: 500 }}>{rowNumber}</td>
+                    <td>{job.company}</td>
+                    <td>{job.position}</td>
+                    <td>{job.date_applied}</td>
+                    <td>{job.wfh}</td>
+                    <td>
+                      {job.job_link ? (
+                        <a 
+                          href={job.job_link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500 }}
+                        >
+                          View Link
+                        </a>
+                      ) : (
+                        <span style={{ color: '#94a3b8' }}>N/A</span>
+                      )}
+                    </td>
+                    <td>{job.notes}</td>
+                    <td>
+                      <select 
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleMoveJob(job, e.target.value);
+                            e.target.value = "";
+                          }
+                        }}
+                      >
+                        <option value="" disabled>Move to...</option>
+                        {Object.entries(JobBuckets)
+                          .filter(([_, tableKey]) => tableKey !== 'all')
+                          .map(([label, tableKey]) => (
+                            <option key={tableKey} value={tableKey}>
+                              {label.replace(/([A-Z])/g, ' $1').trim()}
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => handleOpenEditModal(job)} 
+                          style={{ background: '#f59e0b', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => handleDeleteJob(job)} 
+                          style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* BOTTOM PAGINATION BAR */}
+          <div style={{ paddingBottom: '40px' }}>
+            {renderPaginationBar()}
+          </div>
+        </>
       )}
     </div>
   );
