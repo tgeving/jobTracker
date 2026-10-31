@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react';
 import { JobBuckets } from './constants/buckets';
 import { JobMetricsChart } from './components/JobMetricsChart';
 
+// --- API CONFIGURATION ---
+// Change this to your Tailscale IP (e.g., 'http://100.x.y.z:8000') when testing with another device!
+const API_BASE = 'http://localhost:8000';
+
 export default function App() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
-  const [allJobsCache, setAllJobsCache] = useState<any[]>([]); // <-- Properly declared here
+  const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
   const [selectedBucket, setSelectedBucket] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -55,8 +59,8 @@ export default function App() {
     setCurrentPage(1);
     
     const endpoint = bucketKey === 'all'
-      ? 'http://localhost:8000/api/jobs/all'
-      : `http://localhost:8000/api/jobs/${bucketKey}`;
+      ? `${API_BASE}/api/jobs/all`
+      : `${API_BASE}/api/jobs/${bucketKey}`;
 
     fetch(endpoint)
       .then((res) => res.json())
@@ -70,7 +74,7 @@ export default function App() {
       });
 
     // Fetch global cache for searching across all buckets and powering chart metrics
-    fetch('http://localhost:8000/api/jobs/all')
+    fetch(`${API_BASE}/api/jobs/all`)
       .then((res) => res.json())
       .then((data) => setAllJobsCache(data.items))
       .catch((err) => console.error('Failed to fetch global cache:', err));
@@ -85,7 +89,7 @@ export default function App() {
     try {
       const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket);
       
-      const res = await fetch('http://localhost:8000/api/jobs/move', {
+      const res = await fetch(`${API_BASE}/api/jobs/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -116,7 +120,7 @@ export default function App() {
     if (!confirm(`Are you sure you want to delete ${job.company} - ${job.position}?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:8000/api/jobs/${table}/${job.id}`, {
+      const res = await fetch(`${API_BASE}/api/jobs/${table}/${job.id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete job');
@@ -154,7 +158,7 @@ export default function App() {
     try {
       if (isEditing) {
         const table = editingJobTable === 'all' ? JobBuckets.NewJobsFound : editingJobTable;
-        const res = await fetch(`http://localhost:8000/api/jobs/${table}/${editingJobId}`, {
+        const res = await fetch(`${API_BASE}/api/jobs/${table}/${editingJobId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(jobForm),
@@ -162,7 +166,7 @@ export default function App() {
         if (!res.ok) throw new Error('Failed to update job');
       } else {
         const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket;
-        const res = await fetch(`http://localhost:8000/api/jobs/${targetTable}`, {
+        const res = await fetch(`${API_BASE}/api/jobs/${targetTable}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(jobForm),
@@ -185,7 +189,7 @@ export default function App() {
     }
     setScraping(true);
     try {
-      const res = await fetch('http://localhost:8000/api/scraper/run', {
+      const res = await fetch(`${API_BASE}/api/scraper/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
