@@ -29,9 +29,9 @@ const VALID_TABLES = [
   "i_rejected_them", 
   "waiting_to_hear_back", 
   "pending", 
-  "shit_heads_ghosted_me", 
-  "assholes_rejected_me", 
-  "fuckers"
+  "they_ghosted_me", 
+  "they_rejected_me", 
+  "disappointing"
 ];
 
 async function runJobScraper(searchQuery: string, headlessMode: boolean) {

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import date
+import subprocess
 import os
 from dotenv import load_dotenv
 
@@ -41,7 +42,6 @@ class JobModel(BaseModel):
     wfh: str | None = None
     notes: str | None = None
     job_link: str | None = None
-    no_of_interviews: int | None = None
 
 class MoveJobModel(BaseModel):
     source_table: str
@@ -49,6 +49,11 @@ class MoveJobModel(BaseModel):
     company: str
     position: str
     row_id: str
+
+class ScraperModel(BaseModel):
+    platform: str
+    target: str
+    headless: bool = True
 
 VALID_TABLES = {
     "new_jobs_found",
@@ -69,12 +74,10 @@ def get_all_jobs():
     
     try:
         for table in VALID_TABLES:
-            # Order by id DESC to get most recent first across all tables
             cursor.execute(f"SELECT *, '{table}' as table_name FROM {table} ORDER BY id DESC;")
             rows = cursor.fetchall()
             all_items.extend(rows)
             
-        # Sort combined list by ID descending so newest overall appear at the top of 'all'
         all_items.sort(key=lambda x: x["id"], reverse=True)
         return {"total": len(all_items), "items": all_items}
     except Exception as e:
@@ -91,7 +94,6 @@ def get_jobs_by_table(table_name: str):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Order by id DESC so most recent records appear at the top
         cursor.execute(f"SELECT *, '{table_name}' as table_name FROM {table_name} ORDER BY id DESC;")
         rows = cursor.fetchall()
         return {"total": len(rows), "items": rows}
@@ -115,7 +117,6 @@ def move_job(data: MoveJobModel):
         if not row:
             raise HTTPException(status_code=404, detail="Job record not found in source table")
 
-        # Automatically stamp today's date if moving to 'applied' and date_applied is empty/blank
         final_date_applied = row["date_applied"]
         if data.target_table == "applied" and (not final_date_applied or final_date_applied.strip() == ""):
             final_date_applied = date.today().isoformat()
@@ -206,6 +207,37 @@ def delete_job(table_name: str, job_id: int):
     finally:
         cursor.close()
         conn.close()
+
+# --- SCRAPER TRIGGER ROUTE (Using tsx) ---
+@app.post("/api/scraper/run")
+def run_scraper(data: ScraperModel):
+    try:
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../scraper/jobscraper.ts"))
+        
+        print(f"🚀 Triggering scraper for target: '{data.target}' (headless: {data.headless})")
+        
+        # Uses tsx to correctly execute the TypeScript scraper with your nodenext/verbatimModuleSyntax config
+        cmd = f'npx tsx "{script_path}" --target="{data.target}" --headless={str(data.headless).lower()}'
+        
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            shell=True,
+            cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        )
+
+        return {
+            "status": "success", 
+            "message": f"Successfully executed scraper for '{data.target}'!"
+        }
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr or e.stdout or "Unknown subprocess error"
+        print(f"Scraper subprocess error: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"Scraper script failed: {error_msg}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

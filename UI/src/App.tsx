@@ -30,9 +30,10 @@ export default function App() {
     job_link: ''
   });
 
-  // Scraper Form States
+  // Scraper Form States (Including Headless Toggle)
   const [scraperPlatform, setScraperPlatform] = useState('linkedin');
   const [scraperTarget, setScraperTarget] = useState('');
+  const [scraperHeadless, setScraperHeadless] = useState(true);
   const [scraping, setScraping] = useState(false);
 
   const fetchJobs = (bucketKey: string) => {
@@ -176,7 +177,7 @@ export default function App() {
         body: JSON.stringify({
           platform: scraperPlatform,
           target: scraperTarget,
-          headless: true
+          headless: scraperHeadless
         }),
       });
       const data = await res.json();
@@ -355,11 +356,22 @@ export default function App() {
                 <input 
                   type="text" 
                   placeholder="e.g. SDET or Senior QA Engineer" 
-                  value={scraperTarget} 
+                  //value={scraperTarget} 
+                  value="SDET or Senior QA Engineer Remote"
                   onChange={(e) => setScraperTarget(e.target.value)}
                   required
                   style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
                 />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <input 
+                  type="checkbox" 
+                  id="headlessCheckbox"
+                  checked={scraperHeadless} 
+                  onChange={(e) => setScraperHeadless(e.target.checked)}
+                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                />
+                <label htmlFor="headlessCheckbox" style={{ fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>Run in Headless Mode (background)</label>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
                 <button type="button" onClick={() => setShowScraperModal(false)} style={{ background: '#cbd5e1', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
