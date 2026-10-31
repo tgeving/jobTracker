@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
 
-// white background rgb(255, 255, 255)
-// edit button light gray/blue rgb(226, 232, 240) (#e2e8f0)
-// delete button light red background rgb(254, 215, 215) (#fed7d7)
-
 declare global {
   var baseURL: string;
 }
@@ -52,10 +48,19 @@ test('Validate bucket headers are named properly after table migration in the UI
   }
 });
 
-test('Validate "Add New Job" and "Run Scraper" buttons are present in the UI', async ({ page }) => {
+test('Validate "Add New Job", "Run Scraper", "Search bar" and "Search" buttons are present in the UI', async ({ page }) => {
   await page.goto(globalThis.baseURL);
   await expect(page.getByRole('button', { name: 'Add New Job', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run Scraper', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Search all buckets', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
+});
+
+test('Validate that table headers appear properly in the UI', async ({ page }) => {
+  await page.goto(globalThis.baseURL);
+  const tableHeaders = ['#', 'Company', 'Position', 'Date Applied', 'WFH', 'Link', 'Notes', 'Interviews', 'Move to', 'Actions'];
+
+  await expect(page.locator('table thead th')).toHaveText(tableHeaders);
 });
 
 test('Validate "Edit" and "Delete" buttons are present in the UI', async ({ page }) => {
@@ -72,7 +77,6 @@ test('Validate Move To column dropdown has the correct value types', async ({ pa
   await page.goto(globalThis.baseURL);
   const row = page.locator('table tbody tr').first();
   const col = row.locator('td').filter({ hasText: 'Move To' });
-
   const dropdown = col.locator('select');
 
   for (const bucketName of JobBuckets.map(bucket => bucket.label)) {

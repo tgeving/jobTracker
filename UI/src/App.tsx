@@ -276,7 +276,7 @@ export default function App() {
         <div style={{ display: 'flex', gap: '6px' }}>
           <input 
             type="text" 
-            placeholder="Search all buckets (company, position, notes)..." 
+            placeholder="Search all buckets" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => { 
