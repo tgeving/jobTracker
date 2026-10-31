@@ -54,7 +54,7 @@ test('Validate bucket headers are named properly after table migration in the UI
 
 test('Validate "Add New Job" and "Run Scraper" buttons are present in the UI', async ({ page }) => {
   await page.goto(globalThis.baseURL);
-  await expect(page.getByRole('button', { name: 'Add New Job', exact: true })).toBeVisible
+  await expect(page.getByRole('button', { name: 'Add New Job', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run Scraper', exact: true })).toBeVisible();
 });
 
@@ -68,8 +68,7 @@ test('Validate "Edit" and "Delete" buttons are present in the UI', async ({ page
   await expect(deleteButton).toBeVisible();
 });
 
-test('Validate Move To column dropdown has the correct values t', async ({ page }) => {
-  await page.goto(globalThis.baseURL);
+test('Validate Move To column dropdown has the correct value types', async ({ page }) => {
   await page.goto(globalThis.baseURL);
   const row = page.locator('table tbody tr').first();
   const col = row.locator('td').filter({ hasText: 'Move To' });
@@ -77,8 +76,8 @@ test('Validate Move To column dropdown has the correct values t', async ({ page 
   const dropdown = col.locator('select');
 
   for (const bucketName of JobBuckets.map(bucket => bucket.label)) {
-    if (bucketName === 'All') break;
-    else await expect(dropdown.getByRole('option', { name: bucketName, exact: true })).toHaveText(bucketName);
+    if (bucketName !== 'All') await expect(dropdown.getByRole('option', { name: bucketName, exact: true })).toHaveText(bucketName);
+    else continue; // Skip the "All" option since it's not a valid move-to option
   }
 });
 

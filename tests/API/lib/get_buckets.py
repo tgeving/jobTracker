@@ -39,7 +39,6 @@ class GetBuckets:
         """
         session = session or self._session
         res = session.get(f"{self._jobs_url}/{bucket}")
-        assert res.status_code == codes.ok, f"Failed to fetch buckets: {res.status_code}"
         self._status_code = res.status_code
 
         if res.status_code == codes.ok:
