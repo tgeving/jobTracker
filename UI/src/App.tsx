@@ -412,6 +412,7 @@ export default function App() {
                 <th>WFH</th>
                 <th>Link</th>
                 <th>Notes</th>
+                <th>Interviews</th>
                 <th>Move to</th>
                 <th>Actions</th>
               </tr>
@@ -441,6 +442,7 @@ export default function App() {
                       )}
                     </td>
                     <td>{job.notes}</td>
+                    <td>{job.no_of_interviews}</td>
                     <td>
                       <select 
                         defaultValue=""

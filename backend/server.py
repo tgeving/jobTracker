@@ -41,6 +41,7 @@ class JobModel(BaseModel):
     wfh: str | None = None
     notes: str | None = None
     job_link: str | None = None
+    no_of_interviews: int | None = None
 
 class MoveJobModel(BaseModel):
     source_table: str
