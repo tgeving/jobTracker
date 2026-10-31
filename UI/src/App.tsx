@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { JobBuckets } from './constants/buckets';
+import { JobMetricsChart } from './components/JobMetricsChart';
 
 export default function App() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
-  const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
+  const [allJobsCache, setAllJobsCache] = useState<any[]>([]); // <-- Properly declared here
   const [selectedBucket, setSelectedBucket] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -36,6 +37,19 @@ export default function App() {
   const [scraperHeadless, setScraperHeadless] = useState(true);
   const [scraping, setScraping] = useState(false);
 
+  // Dynamically compute metrics matching exact JobBuckets keys (including new jobs found)
+  const datasetToCount = allJobsCache.length > 0 ? allJobsCache : jobData.items;
+
+  const metricsData = {
+    newJobs: datasetToCount.filter(j => j.table_name === JobBuckets.NewJobsFound || !j.table_name).length,
+    applied: datasetToCount.filter(j => j.table_name === JobBuckets.Applied).length,
+    waiting: datasetToCount.filter(j => j.table_name === JobBuckets.WaitingToHearBack).length,
+    pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,
+    ghosted: datasetToCount.filter(j => j.table_name === JobBuckets.TheyGhostedMe).length,
+    rejected: datasetToCount.filter(j => j.table_name === JobBuckets.TheyRejectedMe).length,
+    disappointing: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointing).length,
+  };
+
   const fetchJobs = (bucketKey: string) => {
     setLoading(true);
     setCurrentPage(1);
@@ -55,7 +69,7 @@ export default function App() {
         setLoading(false);
       });
 
-    // Fetch global cache for searching across all buckets
+    // Fetch global cache for searching across all buckets and powering chart metrics
     fetch('http://localhost:8000/api/jobs/all')
       .then((res) => res.json())
       .then((data) => setAllJobsCache(data.items))
@@ -69,7 +83,7 @@ export default function App() {
   // --- API ACTIONS ---
   const handleMoveJob = async (job: any, targetTable: string) => {
     try {
-      const sourceTable = job.table_name || (selectedBucket === 'all' ? 'new_jobs_found' : selectedBucket);
+      const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket);
       
       const res = await fetch('http://localhost:8000/api/jobs/move', {
         method: 'POST',
@@ -139,7 +153,7 @@ export default function App() {
     e.preventDefault();
     try {
       if (isEditing) {
-        const table = editingJobTable === 'all' ? 'new_jobs_found' : editingJobTable;
+        const table = editingJobTable === 'all' ? JobBuckets.NewJobsFound : editingJobTable;
         const res = await fetch(`http://localhost:8000/api/jobs/${table}/${editingJobId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -147,7 +161,7 @@ export default function App() {
         });
         if (!res.ok) throw new Error('Failed to update job');
       } else {
-        const targetTable = selectedBucket === 'all' ? 'new_jobs_found' : selectedBucket;
+        const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket;
         const res = await fetch(`http://localhost:8000/api/jobs/${targetTable}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -262,6 +276,9 @@ export default function App() {
     <div className="container">
       <h1>JobFinder - Application Tracker</h1>
 
+      {/* Dynamic Metrics Chart Rendering Live Counts */}
+      <JobMetricsChart data={metricsData} />
+
       {/* Top Toolbar Trigger Buttons & Global Search Bar */}
       <div className="toolbar" style={{ marginBottom: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button 
@@ -356,8 +373,7 @@ export default function App() {
                 <input 
                   type="text" 
                   placeholder="e.g. SDET or Senior QA Engineer" 
-                  //value={scraperTarget} 
-                  value="SDET or Senior QA Engineer Remote"
+                  value={scraperTarget}
                   onChange={(e) => setScraperTarget(e.target.value)}
                   required
                   style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
