@@ -7,7 +7,7 @@ export const JobBuckets = {
   Pending: 'pending',
   TheyGhostedMe: 'they_ghosted_me',
   TheyRejectedMe: 'they_rejected_me',
-  Disappointing: 'disappointing',
+  Disappointed: 'disappointed',
 } as const;
 
 // Labels for rendering on buttons
@@ -20,5 +20,5 @@ export const JobBucketLabels: Record<keyof typeof JobBuckets, string> = {
   Pending: 'Pending',
   TheyGhostedMe: 'They Ghosted Me',
   TheyRejectedMe: 'They Rejected Me',
-  Disappointing: 'Disappointing',
+  Disappointed: 'Disappointed',
 };

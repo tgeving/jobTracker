@@ -8,7 +8,7 @@ interface MetricsProps {
     pending: number;
     ghosted: number;
     rejected: number;
-    disappointing: number;
+    disappointed: number;
   };
 }
 
@@ -20,7 +20,7 @@ export const JobMetricsChart: React.FC<MetricsProps> = ({ data }) => {
     { name: 'Pending', count: data.pending, color: '#f59e0b' },
     { name: 'Ghosted', count: data.ghosted, color: '#64748b' },
     { name: 'Rejected', count: data.rejected, color: '#ef4444' },
-    { name: 'Disappointing', count: data.disappointing, color: '#8b5cf6' },
+    { name: 'Disappointed', count: data.disappointed, color: '#8b5cf6' },
   ];
 
   const maxCount = Math.max(...chartData.map(d => d.count), 1);

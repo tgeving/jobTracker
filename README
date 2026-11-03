@@ -20,7 +20,7 @@ A modern, full-stack job application tracking web application and automated pipe
 
 ### Database & Tooling
 * **PostgreSQL (v18)** for persistent relational storage
-* **DBeaver** for local database administration
+* **DBeaver** for local database administration. Community edition https://dbeaver.io/download/
 
 ---
 
@@ -29,6 +29,7 @@ Before you begin, make sure you have the following installed on your local machi
 * **Node.js & npm** (for running the React frontend and Playwright scraper scripts)
 * **Python 3** (with pip, for the FastAPI backend)
 * **PostgreSQL** (for relational data storage)
+
 
 ---
 

@@ -51,7 +51,7 @@ export default function App() {
     pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,
     ghosted: datasetToCount.filter(j => j.table_name === JobBuckets.TheyGhostedMe).length,
     rejected: datasetToCount.filter(j => j.table_name === JobBuckets.TheyRejectedMe).length,
-    disappointing: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointing).length,
+    disappointed: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointed).length,
   };
 
   const fetchJobs = (bucketKey: string) => {

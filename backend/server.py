@@ -64,7 +64,7 @@ VALID_TABLES = {
     "pending",
     "they_ghosted_me",
     "they_rejected_me",
-    "disappointing"
+    "disappointed"
 }
 
 @app.get("/api/jobs/all")
