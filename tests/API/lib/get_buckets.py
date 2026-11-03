@@ -35,7 +35,7 @@ class GetBuckets:
         """Fetch buckets from the API. If a specific bucket is provided, fetch that bucket
         Args:
             session (requests.Session, optional): The session object to use for making API requests. Defaults to self._session
-            bucket (str, optional): The specific bucket to fetch. Defaults to None. i.e 'applied, disappointed, i_rejected_them, etc'
+            bucket (str, optional): The specific bucket to fetch. Defaults to None. i.e 'applied, disappointed, withdrew, etc'
         """
         session = session or self._session
         res = session.get(f"{self._jobs_url}/{bucket}")

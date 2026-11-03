@@ -61,9 +61,9 @@ CREATE TABLE public.disappointing (
 
 -- Drop table
 
--- DROP TABLE public.i_rejected_them;
+-- DROP TABLE public.withdrew;
 
-CREATE TABLE public.i_rejected_them (
+-- DROP TABLE public.withdrew; (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -74,8 +74,8 @@ CREATE TABLE public.i_rejected_them (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT i_rejected_them_id_not_null NOT NULL id,
-	CONSTRAINT i_rejected_them_pkey PRIMARY KEY (id)
+	CONSTRAINT withdrew_id_not_null NOT NULL id,
+	CONSTRAINT withdrew_pkey PRIMARY KEY (id)
 );
 
 -- Drop table

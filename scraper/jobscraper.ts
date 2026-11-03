@@ -27,7 +27,7 @@ export interface ScrapedJob {
 const VALID_TABLES = [
   'new_jobs_found',
   'applied',
-  'i_rejected_them',
+  'withdrew',
   'waiting_to_hear_back',
   'pending',
   'unresponsive',

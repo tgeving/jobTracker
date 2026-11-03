@@ -8,6 +8,7 @@ interface MetricsProps {
     pending: number;
     unresponsive: number;
     rejected: number;
+    withdrew: number;
     disappointed: number;
   };
 }
@@ -20,6 +21,7 @@ export const JobMetricsChart: React.FC<MetricsProps> = ({ data }) => {
     { name: 'Pending', count: data.pending, color: '#f59e0b' },
     { name: 'Unresponsive', count: data.unresponsive, color: '#64748b' },
     { name: 'Rejected', count: data.rejected, color: '#ef4444' },
+    { name: 'Withdrew', count: data.withdrew, color: '#8b5cf6' },
     { name: 'Disappointed', count: data.disappointed, color: '#8b5cf6' },
   ];
 

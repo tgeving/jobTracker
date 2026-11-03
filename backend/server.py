@@ -59,12 +59,12 @@ class ScraperModel(BaseModel):
 VALID_TABLES = {
     "new_jobs_found",
     "applied",
-    "i_rejected_them",
     "waiting_to_hear_back",
     "pending",
     "unresponsive",
     "they_rejected_me",
-    "disappointed"
+    "disappointed",
+    "withdrew"
 }
 
 @app.get("/api/jobs/all")
