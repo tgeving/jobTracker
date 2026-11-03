@@ -50,7 +50,7 @@ export default function App() {
     waiting: datasetToCount.filter(j => j.table_name === JobBuckets.WaitingToHearBack).length,
     pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,
     unresponsive: datasetToCount.filter(j => j.table_name === JobBuckets.Unresponsive).length,
-    rejected: datasetToCount.filter(j => j.table_name === JobBuckets.TheyRejectedMe).length,
+    declined: datasetToCount.filter(j => j.table_name === JobBuckets.Declined).length,
     withdrew: datasetToCount.filter(j => j.table_name === JobBuckets.Withdrew).length,
     disappointed: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointed).length,
   };

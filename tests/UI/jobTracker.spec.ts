@@ -15,7 +15,7 @@ export type BucketKey =
   | 'pending' 
   | 'withdrew' 
   | 'unresponsive'
-  | 'they_rejected_me' 
+  | 'declined' 
   | 'disappointing';
 
 export interface BucketItem {
@@ -32,7 +32,7 @@ export const JobBuckets: BucketItem[] = [
   { key: 'pending', label: 'Pending' },
   { key: 'withdrew', label: 'Withdrew' },
   { key: 'unresponsive', label: 'Unresponsive' },
-  { key: 'they_rejected_me', label: 'They Rejected Me' },
+  { key: 'declined', label: 'Declined' },
   { key: 'disappointing', label: 'Disappointing' },
 ];
 

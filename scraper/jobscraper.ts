@@ -31,7 +31,7 @@ const VALID_TABLES = [
   'waiting_to_hear_back',
   'pending',
   'unresponsive',
-  'they_rejected_me',
+  'declined',
   'disappointing',
 ];
 
