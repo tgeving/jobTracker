@@ -15,14 +15,14 @@ interface MetricsProps {
 
 export const JobMetricsChart: React.FC<MetricsProps> = ({ data }) => {
   const chartData = [
-    { name: 'New Jobs', count: data.newJobs, color: '#10b981' },
-    { name: 'Applied', count: data.applied, color: '#3b82f6' },
-    { name: 'Waiting', count: data.waiting, color: '#06b6d4' },
-    { name: 'Pending', count: data.pending, color: '#f59e0b' },
-    { name: 'Unresponsive', count: data.unresponsive, color: '#64748b' },
-    { name: 'Declined', count: data.declined, color: '#ef4444' },
-    { name: 'Withdrew', count: data.withdrew, color: '#8b5cf6' },
-    { name: 'Disappointed', count: data.disappointed, color: '#8b5cf6' },
+    { name: 'New Jobs', count: data.newJobs, color: '#10b981', id: 'jmNewJobs' },
+    { name: 'Applied', count: data.applied, color: '#3b82f6', id: 'jmApplied' },
+    { name: 'Waiting', count: data.waiting, color: '#06b6d4', id: 'jmWaiting' },
+    { name: 'Pending', count: data.pending, color: '#f59e0b', id: 'jmPending' },
+    { name: 'Unresponsive', count: data.unresponsive, color: '#64748b', id: 'jmUnresponsive' },
+    { name: 'Declined', count: data.declined, color: '#ef4444', id: 'jmDeclined' },
+    { name: 'Withdrew', count: data.withdrew, color: '#8b5cf6', id: 'jmWithdrew' },
+    { name: 'Disappointed', count: data.disappointed, color: '#8b5cf6', id: 'jmDisappointed' },
   ];
 
   const maxCount = Math.max(...chartData.map(d => d.count), 1);
@@ -46,7 +46,7 @@ export const JobMetricsChart: React.FC<MetricsProps> = ({ data }) => {
                   transition: 'height 0.3s ease'
                 }} 
               />
-              <span style={{ fontSize: '11px', marginTop: '8px', color: '#94a3b8', textAlign: 'center', whiteSpace: 'nowrap' }}>{item.name}</span>
+              <span id={item.id} style={{ fontSize: '11px', marginTop: '8px', color: '#94a3b8', textAlign: 'center', whiteSpace: 'nowrap' }}>{item.name}</span>
             </div>
           );
         })}
