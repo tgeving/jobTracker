@@ -45,7 +45,7 @@ export default function App() {
   const datasetToCount = allJobsCache.length > 0 ? allJobsCache : jobData.items;
 
   const metricsData = {
-    newJobs: datasetToCount.filter(j => j.table_name === JobBuckets.NewJobsFound || !j.table_name).length,
+    newJobs: datasetToCount.filter(j => j.table_name === JobBuckets.NewJobs || !j.table_name).length,
     applied: datasetToCount.filter(j => j.table_name === JobBuckets.Applied).length,
     waiting: datasetToCount.filter(j => j.table_name === JobBuckets.WaitingToHearBack).length,
     pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,

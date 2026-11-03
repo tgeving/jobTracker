@@ -1,6 +1,6 @@
 export const JobBuckets = {
   All: 'all',
-  NewJobsFound: 'new_jobs_found',
+  NewJobs: 'new_jobs_found',
   Applied: 'applied',
   Withdrew: 'withdrew',
   WaitingToHearBack: 'waiting_to_hear_back',
@@ -13,7 +13,7 @@ export const JobBuckets = {
 // Labels for rendering on buttons
 export const JobBucketLabels: Record<keyof typeof JobBuckets, string> = {
   All: 'All',
-  NewJobsFound: 'New Jobs Found',
+  NewJobs: 'New Jobs',
   Applied: 'Applied',
   Withdrew: 'Withdrew',
   WaitingToHearBack: 'Waiting to Hear Back',

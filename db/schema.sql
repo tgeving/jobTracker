@@ -84,7 +84,7 @@ CREATE TABLE public.disappointing (
 
 CREATE TABLE public.new_jobs_found (
 	id serial4 NOT NULL,
-	bucket varchar(50) DEFAULT 'New Jobs Found'::character varying NULL,
+	bucket varchar(50) DEFAULT 'New Jobs'::character varying NULL,
 	company varchar(255) NOT NULL,
 	"position" varchar(255) NOT NULL,
 	date_applied varchar(100) NULL,

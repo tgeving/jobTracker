@@ -11,14 +11,14 @@ class TestApplication:
        session = requests.Session()
        get_buckets = GetBuckets(session)
 
-       buckets = get_buckets.fetch_buckets(bucket='they_rejected_me')
+       buckets = get_buckets.fetch_buckets(bucket='declined')
        assert get_buckets.status_code == codes.ok
        assert get_buckets.total_cnt is not None
 
-       buckets = get_buckets.fetch_buckets(bucket='they_ghosted_me')
+       buckets = get_buckets.fetch_buckets(bucket='unresponsive')
        assert get_buckets.status_code == codes.ok
        assert get_buckets.total_cnt is not None
 
-       buckets = get_buckets.fetch_buckets(bucket='disappointing')
+       buckets = get_buckets.fetch_buckets(bucket='disappointed')
        assert get_buckets.status_code == codes.ok
        assert get_buckets.total_cnt is not None

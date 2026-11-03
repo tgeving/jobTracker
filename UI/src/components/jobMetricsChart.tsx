@@ -15,7 +15,7 @@ interface MetricsProps {
 
 export const JobMetricsChart: React.FC<MetricsProps> = ({ data }) => {
   const chartData = [
-    { name: 'New Scraped', count: data.newJobs, color: '#10b981' },
+    { name: 'New Jobs', count: data.newJobs, color: '#10b981' },
     { name: 'Applied', count: data.applied, color: '#3b82f6' },
     { name: 'Waiting', count: data.waiting, color: '#06b6d4' },
     { name: 'Pending', count: data.pending, color: '#f59e0b' },
