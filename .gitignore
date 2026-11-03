@@ -31,3 +31,8 @@ my-browser-profile/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# ignore d.ts, d.ts.map and *.js.map files
+*.d.ts
+*.d.ts.map
+*.js.map
