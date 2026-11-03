@@ -88,7 +88,7 @@ export default function App() {
   // --- API ACTIONS ---
   const handleMoveJob = async (job: any, targetTable: string) => {
     try {
-      const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket);
+      const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
       
       const res = await fetch(`${API_BASE}/api/jobs/move`, {
         method: 'POST',
@@ -158,7 +158,7 @@ export default function App() {
     e.preventDefault();
     try {
       if (isEditing) {
-        const table = editingJobTable === 'all' ? JobBuckets.NewJobsFound : editingJobTable;
+        const table = editingJobTable === 'all' ? JobBuckets.NewJobs : editingJobTable;
         const res = await fetch(`${API_BASE}/api/jobs/${table}/${editingJobId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -166,7 +166,7 @@ export default function App() {
         });
         if (!res.ok) throw new Error('Failed to update job');
       } else {
-        const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobsFound : selectedBucket;
+        const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket;
         const res = await fetch(`${API_BASE}/api/jobs/${targetTable}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
