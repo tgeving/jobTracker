@@ -49,7 +49,7 @@ export default function App() {
     applied: datasetToCount.filter(j => j.table_name === JobBuckets.Applied).length,
     waiting: datasetToCount.filter(j => j.table_name === JobBuckets.WaitingToHearBack).length,
     pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,
-    ghosted: datasetToCount.filter(j => j.table_name === JobBuckets.TheyGhostedMe).length,
+    unresponsive: datasetToCount.filter(j => j.table_name === JobBuckets.Unresponsive).length,
     rejected: datasetToCount.filter(j => j.table_name === JobBuckets.TheyRejectedMe).length,
     disappointed: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointed).length,
   };

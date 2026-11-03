@@ -14,7 +14,7 @@ export type BucketKey =
   | 'waiting_to_hear_back' 
   | 'pending' 
   | 'i_rejected_them' 
-  | 'they_ghosted_me' 
+  | 'unresponsive'
   | 'they_rejected_me' 
   | 'disappointing';
 
@@ -31,7 +31,7 @@ export const JobBuckets: BucketItem[] = [
   { key: 'waiting_to_hear_back', label: 'Waiting To Hear Back' },
   { key: 'pending', label: 'Pending' },
   { key: 'i_rejected_them', label: 'I Rejected Them' },
-  { key: 'they_ghosted_me', label: 'They Ghosted Me' },
+  { key: 'unresponsive', label: 'Unresponsive' },
   { key: 'they_rejected_me', label: 'They Rejected Me' },
   { key: 'disappointing', label: 'Disappointing' },
 ];

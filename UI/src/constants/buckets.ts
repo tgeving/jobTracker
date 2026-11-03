@@ -5,7 +5,7 @@ export const JobBuckets = {
   IRejectedThem: 'i_rejected_them',
   WaitingToHearBack: 'waiting_to_hear_back',
   Pending: 'pending',
-  TheyGhostedMe: 'they_ghosted_me',
+  Unresponsive: 'unresponsive',
   TheyRejectedMe: 'they_rejected_me',
   Disappointed: 'disappointed',
 } as const;
@@ -18,7 +18,7 @@ export const JobBucketLabels: Record<keyof typeof JobBuckets, string> = {
   IRejectedThem: 'I Rejected Them',
   WaitingToHearBack: 'Waiting to Hear Back',
   Pending: 'Pending',
-  TheyGhostedMe: 'They Ghosted Me',
+  Unresponsive: 'Unresponsive',
   TheyRejectedMe: 'They Rejected Me',
   Disappointed: 'Disappointed',
 };

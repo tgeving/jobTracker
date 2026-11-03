@@ -120,9 +120,9 @@ CREATE TABLE public.pending (
 
 -- Drop table
 
--- DROP TABLE public.they_ghosted_me;
+-- DROP TABLE public.unresponsive;
 
-CREATE TABLE public.they_ghosted_me (
+CREATE TABLE public.unresponsive (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -133,8 +133,8 @@ CREATE TABLE public.they_ghosted_me (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT they_ghosted_me_id_not_null NOT NULL id,
-	CONSTRAINT they_ghosted_me_pkey PRIMARY KEY (id)
+	CONSTRAINT unresponsive_id_not_null NOT NULL id,
+	CONSTRAINT unresponsive_pkey PRIMARY KEY (id)
 );
 
 -- Drop table
