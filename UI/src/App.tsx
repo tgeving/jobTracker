@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { JobBuckets } from './constants/buckets';
-import { JobMetricsChart } from './components/JobMetricsChart';
+import { JobMetricsChart } from './components/jobMetricsChart';
 
 // --- API CONFIGURATION ---
 // Change this to your Tailscale IP (e.g., 'http://100.x.y.z:8000') when testing with another device!
