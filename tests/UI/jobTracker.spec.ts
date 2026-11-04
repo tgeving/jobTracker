@@ -43,7 +43,6 @@ test.describe('JobTracker UI Comprehensive Suite', () => {
     await page.goto(globalThis.baseURL);
     await expect(page.locator('h1')).toHaveText('JobFinder - Application Tracker');
 
-    const tabsContainer = page.locator('.tabs, div').filter({ hasText: 'All' });
     for (const bucketName of JobBuckets.map(bucket => bucket.label)) {
       await expect(
         page.getByRole('button', { name: bucketName, exact: true }).first()
@@ -111,27 +110,32 @@ test.describe('JobTracker UI Comprehensive Suite', () => {
     // Check main sections
     await expect(page.locator('text=Application Pipeline Metrics')).toBeVisible();
     
-    // Verify specific metric categories from the graph/card metrics bar
-    await expect(page.locator('id=jmNewJobs')).toBeVisible();
-    await expect(page.locator('id=jmApplied')).toBeVisible();
-    await expect(page.locator('id=jmWaiting')).toBeVisible();
-    await expect(page.locator('id=jmPending')).toBeVisible();
-    await expect(page.locator('id=jmUnresponsive')).toBeVisible();
-    await expect(page.locator('id=jmDeclined')).toBeVisible();
-    await expect(page.locator('id=jmWithdrew')).toBeVisible();
-    await expect(page.locator('id=jmDisappointed')).toBeVisible();
+    // Verify specific metric categories using valid CSS ID selectors (#)
+    await expect(page.locator('#jmNewJobs')).toBeVisible();
+    await expect(page.locator('#jmApplied')).toBeVisible();
+    await expect(page.locator('#jmWaiting')).toBeVisible();
+    await expect(page.locator('#jmPending')).toBeVisible();
+    await expect(page.locator('#jmUnresponsive')).toBeVisible();
+    await expect(page.locator('#jmDeclined')).toBeVisible();
+    await expect(page.locator('#jmWithdrew')).toBeVisible();
+    await expect(page.locator('#jmDisappointed')).toBeVisible();
   });
 
-  test('Validate global search input filters results', async ({ page }) => {
+  test('Validate user can search for a company, that company appears in the global search results and then clears the results when the search is cleared', async ({ page }) => {
     await page.goto(globalThis.baseURL);
 
-    const searchInput = page.getByRole('textbox', { name: 'Search all buckets' });
-    await searchInput.fill('Workiva');
+    const searchParam = page.getByPlaceholder('Search all buckets');
+    await searchParam.fill('KnowBe$');
     await page.getByRole('button', { name: 'Search', exact: true }).click();
 
     // Verify the table filters down to show the company
-    const firstRowCompany = page.locator('table tbody tr').first().locator('td').nth(1);
-    await expect(firstRowCompany).toHaveText('Workiva');
+    const filterBCompany = page.locator('table tbody tr').filter({ hasText: 'KnowBe$' });
+    await expect(filterBCompany).toHaveCount(1);
+
+    // Clear the search input
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
+    const allComp = page.locator('table tbody tr');
+    await expect(allComp).not.toHaveCount(1); // Expect more than 1 row to be present after clearing the search
   });
 
   test('Validate pagination and rows per page controls', async ({ page }) => {
@@ -152,13 +156,51 @@ test.describe('JobTracker UI Comprehensive Suite', () => {
     await expect(page.locator('text=Page 2 of ').first()).toBeVisible();
   });
 
-  test('Validate Add New Job modal opens successfully', async ({ page }) => {
+  test('Validate a user can add a new job successfully', async ({ page }) => {
     await page.goto(globalThis.baseURL);
     
+    // Navigate to 'New Jobs' tab so deletions default to a valid non-all table context
+    await page.getByRole('button', { name: 'New Jobs', exact: true }).click();
+
     await page.getByRole('button', { name: 'Add New Job', exact: true }).click();
     
     // Verify input fields for adding a job appear
     await expect(page.getByPlaceholder('Company *')).toBeVisible();
     await expect(page.getByPlaceholder('Position *')).toBeVisible();
+    await expect(page.getByPlaceholder('Date Applied')).toBeVisible();
+    await expect(page.getByPlaceholder('WFH (Yes/No/Hybrid)')).toBeVisible();
+    await expect(page.getByPlaceholder('Job Link')).toBeVisible();
+    await expect(page.getByPlaceholder('Notes')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save Job', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+
+    // Fill in the form and submit
+    await page.getByPlaceholder('Company *').fill('Test Company');
+    await page.getByPlaceholder('Position *').fill('Test Position');
+    await page.getByPlaceholder('Date Applied').fill('2024-06-01');
+    await page.getByPlaceholder('WFH (Yes/No/Hybrid)').fill('Yes');
+    await page.getByPlaceholder('Job Link').fill('https://example.com/job');
+    await page.getByPlaceholder('Notes').fill('This is a test note.');
+    await page.getByRole('button', { name: 'Save Job', exact: true }).click();
+
+    // Verify the new job appears in the table
+    const searchParam = page.getByPlaceholder('Search all buckets');
+    await searchParam.fill('Test Company');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+
+    const newJobRow = page.locator('table tbody tr').filter({ hasText: 'Test Company' }).filter({ hasText: 'Test Position' });
+    await expect(newJobRow).toHaveCount(1);
+
+    // Set up native dialog handler to automatically accept the window.confirm() popup
+    page.once('dialog', async dialog => {
+      await dialog.accept();
+    });
+
+    // Clean up by deleting the test job
+    await newJobRow.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    // Verify the job is removed from the search results
+    const deletedJobRow = page.locator('table tbody tr').filter({ hasText: 'Test Company' }).filter({ hasText: 'Test Position' });
+    await expect(deletedJobRow).toHaveCount(0);
   });
 });
