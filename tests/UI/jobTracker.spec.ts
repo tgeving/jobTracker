@@ -191,13 +191,15 @@ test.describe('JobTracker UI Comprehensive Suite', () => {
     const newJobRow = page.locator('table tbody tr').filter({ hasText: 'Test Company' }).filter({ hasText: 'Test Position' });
     await expect(newJobRow).toHaveCount(1);
 
-    // Set up native dialog handler to automatically accept the window.confirm() popup
-    page.once('dialog', async dialog => {
-      await dialog.accept();
-    });
-
-    // Clean up by deleting the test job
+    // Click delete on the row
     await newJobRow.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    // Verify custom delete modal appears, then click "Confirm Delete"
+    await expect(page.getByText('Are you sure you want to delete Test Company')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Confirm Delete', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+    
+    await page.getByRole('button', { name: 'Confirm Delete', exact: true }).click();
 
     // Verify the job is removed from the search results
     const deletedJobRow = page.locator('table tbody tr').filter({ hasText: 'Test Company' }).filter({ hasText: 'Test Position' });

@@ -3,7 +3,6 @@ import { JobBuckets } from './constants/buckets';
 import { JobMetricsChart } from './components/jobMetricsChart';
 
 // --- API CONFIGURATION ---
-// Change this to your Tailscale IP (e.g., 'http://100.x.y.z:8000') when testing with another device!
 const API_BASE = 'http://localhost:8000';
 
 export default function App() {
@@ -21,6 +20,7 @@ export default function App() {
   // Modal Visibility States
   const [showJobModal, setShowJobModal] = useState(false);
   const [showScraperModal, setShowScraperModal] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<any>(null);
 
   // Job Form States (Add & Edit)
   const [isEditing, setIsEditing] = useState(false);
@@ -35,13 +35,13 @@ export default function App() {
     job_link: ''
   });
 
-  // Scraper Form States (Including Headless Toggle)
+  // Scraper Form States
   const [scraperPlatform, setScraperPlatform] = useState('linkedin');
   const [scraperTarget, setScraperTarget] = useState('');
   const [scraperHeadless, setScraperHeadless] = useState(true);
   const [scraping, setScraping] = useState(false);
 
-  // Dynamically compute metrics matching exact JobBuckets keys (including new jobs found)
+  // Dynamically compute metrics matching exact JobBuckets keys
   const datasetToCount = allJobsCache.length > 0 ? allJobsCache : jobData.items;
 
   const metricsData = {
@@ -74,7 +74,6 @@ export default function App() {
         setLoading(false);
       });
 
-    // Fetch global cache for searching across all buckets and powering chart metrics
     fetch(`${API_BASE}/api/jobs/all`)
       .then((res) => res.json())
       .then((data) => setAllJobsCache(data.items))
@@ -112,19 +111,25 @@ export default function App() {
     }
   };
 
-  const handleDeleteJob = async (job: any) => {
+  const handleDeleteJob = (job: any) => {
     const table = job.table_name || selectedBucket;
     if (table === 'all') {
       alert('Please select a specific bucket tab to delete a job.');
       return;
     }
-    if (!confirm(`Are you sure you want to delete ${job.company} - ${job.position}?`)) return;
+    setJobToDelete(job);
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+    const table = jobToDelete.table_name || selectedBucket;
 
     try {
-      const res = await fetch(`${API_BASE}/api/jobs/${table}/${job.id}`, {
+      const res = await fetch(`${API_BASE}/api/jobs/${table}/${jobToDelete.id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete job');
+      setJobToDelete(null);
       fetchJobs(selectedBucket);
     } catch (err) {
       console.error(err);
@@ -213,7 +218,7 @@ export default function App() {
     }
   };
 
-  // 1. GLOBAL SEARCH LOGIC (ensuring newest items stay on top)
+  // 1. GLOBAL SEARCH LOGIC
   const sourceDataset = activeSearchTerm ? allJobsCache : jobData.items;
 
   const filteredItems = sourceDataset
@@ -225,14 +230,13 @@ export default function App() {
       const notes = (job.notes || '').toLowerCase();
       return company.includes(query) || position.includes(query) || notes.includes(query);
     })
-    .sort((a, b) => b.id - a.id); // Ensure descending order (newest first)
+    .sort((a, b) => b.id - a.id);
 
   // 2. Pagination Calculations
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage) || 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentTableItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
 
-  // Reusable Pagination Component Bar
   const renderPaginationBar = () => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0', flexWrap: 'wrap', gap: '12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -281,10 +285,8 @@ export default function App() {
     <div className="container">
       <h1>JobFinder - Application Tracker</h1>
 
-      {/* Dynamic Metrics Chart Rendering Live Counts */}
       <JobMetricsChart data={metricsData} />
 
-      {/* Top Toolbar Trigger Buttons & Global Search Bar */}
       <div className="toolbar" style={{ marginBottom: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button 
           type="button" 
@@ -294,7 +296,6 @@ export default function App() {
           Add New Job
         </button>
 
-        {/* Search Input & Execute Search Button Group */}
         <div style={{ display: 'flex', gap: '6px' }}>
           <input 
             type="text" 
@@ -339,36 +340,79 @@ export default function App() {
         </button>
       </div>
 
-      {/* --- MODAL OVERLAY: ADD / EDIT JOB --- */}
+      {/* --- STANDARDIZED MODAL OVERLAY: ADD / EDIT JOB --- */}
       {showJobModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', width: '500px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
             <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>{isEditing ? 'Edit Job Record' : 'Add New Job Record'}</h3>
             <form onSubmit={handleSaveJob} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <input type="text" placeholder="Company *" value={jobForm.company} onChange={(e) => setJobForm({...jobForm, company: e.target.value})} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-              <input type="text" placeholder="Position *" value={jobForm.position} onChange={(e) => setJobForm({...jobForm, position: e.target.value})} required style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-              <input type="text" placeholder="Date Applied" value={jobForm.date_applied} onChange={(e) => setJobForm({...jobForm, date_applied: e.target.value})} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-              <input type="text" placeholder="WFH (Yes/No/Hybrid)" value={jobForm.wfh} onChange={(e) => setJobForm({...jobForm, wfh: e.target.value})} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
-              <input type="text" placeholder="Job Link" value={jobForm.job_link} onChange={(e) => setJobForm({...jobForm, job_link: e.target.value})} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', gridColumn: 'span 2' }} />
-              <textarea placeholder="Notes" value={jobForm.notes} onChange={(e) => setJobForm({...jobForm, notes: e.target.value})} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', gridColumn: 'span 2', minHeight: '80px' }} />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', gridColumn: 'span 2', marginTop: '8px' }}>
-                <button type="button" onClick={() => setShowJobModal(false)} style={{ background: '#cbd5e1', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>{isEditing ? 'Update Job' : 'Save Job'}</button>
+              <input type="text" placeholder="Company *" value={jobForm.company} onChange={(e) => setJobForm({...jobForm, company: e.target.value})} required style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }} />
+              <input type="text" placeholder="Position *" value={jobForm.position} onChange={(e) => setJobForm({...jobForm, position: e.target.value})} required style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }} />
+              <input type="text" placeholder="Date Applied" value={jobForm.date_applied} onChange={(e) => setJobForm({...jobForm, date_applied: e.target.value})} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }} />
+              <input type="text" placeholder="WFH (Yes/No/Hybrid)" value={jobForm.wfh} onChange={(e) => setJobForm({...jobForm, wfh: e.target.value})} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }} />
+              <input type="text" placeholder="Job Link" value={jobForm.job_link} onChange={(e) => setJobForm({...jobForm, job_link: e.target.value})} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', gridColumn: 'span 2' }} />
+              <textarea placeholder="Notes" value={jobForm.notes} onChange={(e) => setJobForm({...jobForm, notes: e.target.value})} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', gridColumn: 'span 2', minHeight: '80px', resize: 'vertical' }} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', gridColumn: 'span 2', marginTop: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowJobModal(false)} 
+                  style={{ background: '#cbd5e1', color: '#0f172a', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  {isEditing ? 'Update Job' : 'Save Job'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- MODAL OVERLAY: RUN SCRAPER --- */}
+      {/* --- MODAL OVERLAY: CONFIRM DELETE --- */}
+      {jobToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#0f172a' }}>Confirm Deletion</h3>
+            <p style={{ color: '#334155', fontSize: '14px', marginBottom: '20px' }}>
+              Are you sure you want to delete <strong>{jobToDelete.company}</strong> - {jobToDelete.position}?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button 
+                type="button" 
+                onClick={() => setJobToDelete(null)} 
+                style={{ background: '#cbd5e1', color: '#0f172a', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={confirmDeleteJob} 
+                style={{ background: '#ef4444', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- STANDARDIZED MODAL OVERLAY: RUN SCRAPER --- */}
       {showScraperModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div style={{ background: '#ffffff', padding: '24px', borderRadius: '12px', width: '400px', maxWidth: '90%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
             <h3 style={{ marginTop: 0, marginBottom: '16px', color: '#0f172a' }}>Run Job Scraper</h3>
-            <form onSubmit={handleRunScraper} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <form onSubmit={handleRunScraper} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#0f172a' }}>Platform</label>
-                <select value={scraperPlatform} onChange={(e) => setScraperPlatform(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                <select 
+                  value={scraperPlatform} 
+                  onChange={(e) => setScraperPlatform(e.target.value)} 
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', background: '#fff', cursor: 'pointer' }}
+                >
                   <option value="linkedin">LinkedIn</option>
                   <option value="indeed">Indeed</option>
                 </select>
@@ -381,10 +425,10 @@ export default function App() {
                   value={scraperTarget}
                   onChange={(e) => setScraperTarget(e.target.value)}
                   required
-                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                 <input 
                   type="checkbox" 
                   id="headlessCheckbox"
@@ -395,8 +439,18 @@ export default function App() {
                 <label htmlFor="headlessCheckbox" style={{ fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>Run in Headless Mode (background)</label>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button type="button" onClick={() => setShowScraperModal(false)} style={{ background: '#cbd5e1', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-                <button type="submit" disabled={scraping} style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowScraperModal(false)} 
+                  style={{ background: '#cbd5e1', color: '#0f172a', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={scraping} 
+                  style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 500, opacity: scraping ? 0.7 : 1 }}
+                >
                   {scraping ? 'Running Scraper...' : 'Execute Scraper'}
                 </button>
               </div>
@@ -405,7 +459,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Dynamic Status Bucket Tabs */}
       <div className="tabs">
         {Object.entries(JobBuckets).map(([label, tableKey]) => (
           <button
@@ -427,12 +480,10 @@ export default function App() {
         Showing entries {filteredItems.length > 0 ? startIndex + 1 : 0} - {Math.min(startIndex + itemsPerPage, filteredItems.length)} of {filteredItems.length} matching entries (Total: {jobData.total})
       </p>
 
-      {/* Loading & Data Table */}
       {loading ? (
         <p>Loading database records...</p>
       ) : (
         <>
-          {/* TOP PAGINATION BAR */}
           {renderPaginationBar()}
 
           <table className="job-table">
@@ -520,7 +571,6 @@ export default function App() {
             </tbody>
           </table>
 
-          {/* BOTTOM PAGINATION BAR */}
           <div style={{ paddingBottom: '40px' }}>
             {renderPaginationBar()}
           </div>
