@@ -41,11 +41,6 @@ export function useJobs() {
       .then(res => res.json())
       .then(data => { setJobData(data); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
-
-    fetch(`${API_BASE}/api/jobs/all`)
-      .then(res => res.json())
-      .then(data => setAllJobsCache(data.items))
-      .catch(err => console.error(err));
   };
 
   useEffect(() => { fetchJobs(selectedBucket); }, [selectedBucket]);
