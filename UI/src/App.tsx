@@ -12,8 +12,7 @@ export default function App() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
   const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
   
-  // 1. Default selected bucket to NewJobs instead of 'all'
-  const [selectedBucket, setSelectedBucket] = useState(JobBuckets.NewJobs);
+  const [selectedBucket, setSelectedBucket] = useState<string>(JobBuckets.NewJobs);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -32,13 +31,11 @@ export default function App() {
   const [jobForm, setJobForm] = useState({ company: '', position: '', date_applied: '', wfh: '', notes: '', job_link: '' });
 
   const [scraperPlatform, setScraperPlatform] = useState('linkedin');
-  
-  // 3. Pre-fill wide-net scraper target keyword
+
   const [scraperTarget, setScraperTarget] = useState('QA SDET Test Automation Remote');
-  
-  // 2. Default headless mode to false so the browser runs visually by default
+
   const [scraperHeadless, setScraperHeadless] = useState(false);
-  
+
   const [scraping, setScraping] = useState(false);
 
   const datasetToCount = allJobsCache.length > 0 ? allJobsCache : jobData.items;
@@ -86,7 +83,7 @@ export default function App() {
 
   const confirmDeleteJob = async () => {
     if (!jobToDelete) return;
-    const table = jobToDelete.table_name || selectedBucket;
+    const table = jobToDelete.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
     try {
       const res = await fetch(`${API_BASE}/api/jobs/${table}/${jobToDelete.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete job');
@@ -99,7 +96,7 @@ export default function App() {
     e.preventDefault();
     try {
       if (isEditing) {
-        const table = editingJobTable === 'all' ? JobBuckets.NewJobs : editingJobTable;
+        const table = editingJobTable || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
         await fetch(`${API_BASE}/api/jobs/${table}/${editingJobId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -171,6 +168,9 @@ export default function App() {
       <RunScraperModal isOpen={showScraperModal} scraperPlatform={scraperPlatform} setScraperPlatform={setScraperPlatform} scraperTarget={scraperTarget} setScraperTarget={setScraperTarget} scraperHeadless={scraperHeadless} setScraperHeadless={setScraperHeadless} scraping={scraping} onClose={() => setShowScraperModal(false)} onRun={handleRunScraper} />
 
       <div className="tabs">
+        <button type="button" className={selectedBucket === 'all' ? 'active' : ''} onClick={() => { setSelectedBucket('all'); setActiveSearchTerm(''); setSearchQuery(''); }}>
+          All
+        </button>
         {Object.entries(JobBuckets).map(([label, tableKey]) => (
           <button key={tableKey} type="button" className={selectedBucket === tableKey ? 'active' : ''} onClick={() => { setSelectedBucket(tableKey); setActiveSearchTerm(''); setSearchQuery(''); }}>
             {label.replace(/([A-Z])/g, ' $1').trim()}
@@ -219,7 +219,7 @@ export default function App() {
                   <td>
                     <select defaultValue="" onChange={e => { if (e.target.value) { handleMoveJob(job, e.target.value); e.target.value = ''; } }}>
                       <option value="" disabled>Move to...</option>
-                      {Object.entries(JobBuckets).filter(([_, k]) => k !== 'all').map(([l, k]) => <option key={k} value={k}>{l.replace(/([A-Z])/g, ' $1').trim()}</option>)}
+                      {Object.entries(JobBuckets).map(([l, k]) => <option key={k} value={k}>{l.replace(/([A-Z])/g, ' $1').trim()}</option>)}
                     </select>
                   </td>
                   <td>

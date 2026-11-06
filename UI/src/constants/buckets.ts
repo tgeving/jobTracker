@@ -2,13 +2,13 @@ export const JobBuckets = {
   All: 'all',
   NewJobs: 'new_jobs_found',
   Applied: 'applied',
-  Withdrew: 'withdrew',
   WaitingToHearBack: 'waiting_to_hear_back',
   Pending: 'pending',
   Unresponsive: 'unresponsive',
   Declined: 'declined',
+  Withdrew: 'withdrew',
   Disappointed: 'disappointed',
-} as const;
+};
 
 // Labels for rendering on buttons
 export const JobBucketLabels: Record<keyof typeof JobBuckets, string> = {

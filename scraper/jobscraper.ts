@@ -23,9 +23,8 @@ export interface ScrapedJob {
   wfh: string;
 }
 
-// All valid buckets/tables to check against existing applications
-const VALID_TABLES = [
-  'new_jobs_found',
+// Historical career pipeline tables to check against duplicates (excluding new_jobs_found)
+const HISTORICAL_TABLES = [
   'applied',
   'withdrew',
   'waiting_to_hear_back',
@@ -42,7 +41,6 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
   const userDataDir = path.resolve(__dirname, '../my-browser-profile');
   console.log(`📂 Using browser profile directory: ${userDataDir}`);
 
-  // Launch browser context
   const browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless: headlessMode,
     viewport: { width: 1280, height: 800 },
@@ -61,12 +59,10 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    // Diagnostic check: Print current page title and URL to verify we aren't blocked or logged out
     const currentTitle = await page.title();
     const currentUrl = page.url();
     console.log(`🌐 Current Page Title: "${currentTitle}" | URL: ${currentUrl}`);
 
-    // Handle sign-in modal if present
     const signInWithEmailBtn = page
       .locator('button:has-text("Sign in with Email"), button:has-text("Sign in")')
       .filter({ hasText: /email|sign in/i });
@@ -93,38 +89,45 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
       console.log('✅ Session profile loaded successfully (No login form needed).');
     }
 
-    // Call scraper
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
     console.log(`📊 Evaluation Phase: Total unique jobs extracted from LinkedIn = ${linkedinJobs.length}`);
 
     if (linkedinJobs.length === 0) {
-      console.log('⚠️ WARNING: 0 jobs were returned by scrapeLinkedIn. Check if LinkedIn is displaying a security checkpoint or empty results view.');
+      console.log('⚠️ WARNING: 0 jobs were returned by scrapeLinkedIn.');
     }
 
     for (const job of linkedinJobs) {
-      let existsAnywhere = false;
-      const cleanCompany = job.company.trim().toLowerCase();
-      const cleanPosition = job.position.trim().toLowerCase();
+      let existsInHistory = false;
+      const cleanCompany = (job.company || '').trim().toLowerCase();
+      const cleanPosition = (job.position || '').trim().toLowerCase();
 
-      for (const table of VALID_TABLES) {
-        const queryCheck = `
-          SELECT 1
-          FROM "${table}"
-          WHERE LOWER(TRIM(company)) = $1
-            AND LOWER(TRIM(position)) = $2
-          LIMIT 1
-        `;
+      if (!cleanCompany || !cleanPosition) continue;
 
-        const res = await client.query(queryCheck, [cleanCompany, cleanPosition]);
+      // Check against historical decision tables only
+      for (const table of HISTORICAL_TABLES) {
+        try {
+          const queryCheck = `
+            SELECT 1
+            FROM "${table}"
+            WHERE LOWER(TRIM(company)) = $1
+              AND LOWER(TRIM(position)) = $2
+            LIMIT 1
+          `;
 
-        if (res.rows.length > 0) {
-          existsAnywhere = true;
-          console.log(`-> Duplicate skipped (Found in table "${table}"): ${job.company} - ${job.position}`);
-          break;
+          const res = await client.query(queryCheck, [cleanCompany, cleanPosition]);
+
+          if (res.rows.length > 0) {
+            existsInHistory = true;
+            console.log(`-> Duplicate skipped (Found in historical table "${table}"): ${job.company} - ${job.position}`);
+            break;
+          }
+        } catch (tableErr) {
+          // Skip missing table errors gracefully to prevent crashes
+          console.warn(`⚠️ Warning: Could not query table "${table}":`, tableErr);
         }
       }
 
-      if (existsAnywhere) continue;
+      if (existsInHistory) continue;
 
       try {
         const insertQuery = `
@@ -153,7 +156,7 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
 async function main() {
   const args = process.argv.slice(2);
   let targetQuery = 'Senior QA Automation SDET Engineer Test Remote';
-  let headlessArg = false; // Default to false so you can see the browser window launch!
+  let headlessArg = false;
 
   args.forEach((arg) => {
     if (arg.startsWith('--target=')) {

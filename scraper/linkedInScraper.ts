@@ -29,16 +29,16 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
 
     for (const card of jobCards) {
       try {
-        // Look for title links inside the card
         const linkElement = card.locator('a[href*="/jobs/view/"]').first();
         if (await linkElement.count() === 0) continue;
 
-        const titleElement = card.locator('.job-card-list__title, .base-search-card__title, .job-card-container__link, strong, a.disabled.ember-view');
-        const companyElement = card.locator('.job-card-container__company-name, .base-search-card__subtitle, .artdeco-entity-lockup__subtitle, h4');
+        // Explicitly target title and company classes to prevent field swaps
+        const titleElement = card.locator('.job-card-list__title, .base-search-card__title, .job-card-container__link').first();
+        const companyElement = card.locator('.job-card-container__company-name, .base-search-card__subtitle, .artdeco-entity-lockup__subtitle').first();
 
         if (await titleElement.count() === 0) continue;
 
-        let title = (await titleElement.first().innerText()).trim();
+        let title = (await titleElement.innerText()).trim();
         title = title.split('\n')[0].replace(/with verification/gi, '').trim();
 
         // Skip if it grabbed a non-job title link
@@ -46,7 +46,7 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
 
         let company = 'Unknown Company';
         if (await companyElement.count() > 0) {
-          company = (await companyElement.first().innerText()).trim().split('\n')[0];
+          company = (await companyElement.innerText()).trim().split('\n')[0];
         }
 
         let jobLink = (await linkElement.getAttribute('href')) || '';
