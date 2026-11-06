@@ -42,9 +42,9 @@ CREATE TABLE public.declined (
 
 -- Drop table
 
--- DROP TABLE public.disappointing;
+-- DROP TABLE public.disappointed;
 
-CREATE TABLE public.disappointing (
+CREATE TABLE public.disappointed (
 	company varchar NULL,
 	date_applied varchar NULL,
 	"position" varchar NULL,
@@ -55,8 +55,8 @@ CREATE TABLE public.disappointing (
 	notes varchar NULL,
 	job_link varchar NULL,
 	id serial4 NOT NULL,
-	CONSTRAINT disappointing_id_not_null NOT NULL id,
-	CONSTRAINT disappointing_pkey PRIMARY KEY (id)
+	CONSTRAINT disappointed_id_not_null NOT NULL id,
+	CONSTRAINT disappointed_pkey PRIMARY KEY (id)
 );
 
 -- Drop table

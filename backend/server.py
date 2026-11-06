@@ -274,13 +274,20 @@ def run_scraper(data: ScraperModel):
         os.path.join(os.path.dirname(__file__), "../scraper/jobscraper.ts")
     )
 
+    # Fallback to the wide-net search target if data.target is missing
+    target_query = (
+        data.target
+        if data.target and data.target.strip()
+        else "Senior QA Automation SDET Engineer Test Remote"
+    )
+
     print(
-        f"🚀 Triggering scraper for target: '{data.target}' (headless:"
+        f"🚀 Triggering scraper for target: '{target_query}' (headless:"
         f" {data.headless})"
     )
 
     cmd = (
-        f'npx tsx "{script_path}" --target="{data.target}"'
+        f'npx tsx "{script_path}" --target="{target_query}"'
         f" --headless={str(data.headless).lower()}"
     )
 
@@ -295,15 +302,17 @@ def run_scraper(data: ScraperModel):
 
     return {
         "status": "success",
-        "message": f"Successfully executed scraper for '{data.target}'!",
+        "message": f"Successfully executed scraper for '{target_query}'!",
     }
   except subprocess.CalledProcessError as e:
-    error_msg = e.stderr or e.stdout or "Unknown subprocess error"
-    print(f"Scraper subprocess error: {error_msg}")
+    error_output = e.stderr or e.stdout or "Unknown subprocess error"
+    print(f"❌ Scraper Subprocess STDERR:\n{error_output}")
+    
     raise HTTPException(
-        status_code=500, detail=f"Scraper script failed: {error_msg}"
+        status_code=500, detail=f"Scraper script failed: {error_output}"
     )
   except Exception as e:
+    print(f"❌ Unexpected server error during scraper trigger: {str(e)}")
     raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -311,3 +320,4 @@ if __name__ == "__main__":
   import uvicorn
 
   uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+  

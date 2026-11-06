@@ -32,14 +32,17 @@ const VALID_TABLES = [
   'pending',
   'unresponsive',
   'declined',
-  'disappointing',
+  'disappointed',
 ];
 
 export async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   console.log(`🚀 Starting Job Scraping Pipeline with query: "${searchQuery}"`);
+  console.log(`⚙️ Headless Mode is set to: ${headlessMode}`);
 
   const userDataDir = path.resolve(__dirname, '../my-browser-profile');
+  console.log(`📂 Using browser profile directory: ${userDataDir}`);
 
+  // Launch browser context
   const browserContext = await chromium.launchPersistentContext(userDataDir, {
     headless: headlessMode,
     viewport: { width: 1280, height: 800 },
@@ -58,12 +61,18 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
+    // Diagnostic check: Print current page title and URL to verify we aren't blocked or logged out
+    const currentTitle = await page.title();
+    const currentUrl = page.url();
+    console.log(`🌐 Current Page Title: "${currentTitle}" | URL: ${currentUrl}`);
+
     // Handle sign-in modal if present
     const signInWithEmailBtn = page
       .locator('button:has-text("Sign in with Email"), button:has-text("Sign in")')
       .filter({ hasText: /email|sign in/i });
 
     if (await signInWithEmailBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log('🔑 Sign-in prompt detected. Attempting automatic login...');
       await signInWithEmailBtn.first().click();
       await page.waitForTimeout(2000);
     }
@@ -79,10 +88,18 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
       await passwordInput.first().fill(process.env.LINKEDIN_PASSWORD || '');
       await submitButton.click();
       await page.waitForTimeout(5000);
+      console.log('🔐 Login credentials submitted.');
+    } else {
+      console.log('✅ Session profile loaded successfully (No login form needed).');
     }
 
+    // Call scraper
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
-    console.log(`Evaluating ${linkedinJobs.length} scraped jobs against all database buckets...`);
+    console.log(`📊 Evaluation Phase: Total unique jobs extracted from LinkedIn = ${linkedinJobs.length}`);
+
+    if (linkedinJobs.length === 0) {
+      console.log('⚠️ WARNING: 0 jobs were returned by scrapeLinkedIn. Check if LinkedIn is displaying a security checkpoint or empty results view.');
+    }
 
     for (const job of linkedinJobs) {
       let existsAnywhere = false;
@@ -116,7 +133,7 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
           ON CONFLICT DO NOTHING
         `;
         await client.query(insertQuery, [job.company, job.position, job.jobLink, job.wfh]);
-        console.log(`-> Saved new job: ${job.company} - ${job.position}`);
+        console.log(`✨ -> Saved new job: ${job.company} - ${job.position}`);
         newJobsSavedCount++;
       } catch (dbErr) {
         console.error(`❌ DB Insert Error for ${job.company} - ${job.position}:`, dbErr);
@@ -125,7 +142,7 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
 
     return newJobsSavedCount;
   } catch (err) {
-    console.error('Error during scraping pipeline:', err);
+    console.error('❌ Error during scraping pipeline execution:', err);
     return 0;
   } finally {
     client.release();
@@ -135,8 +152,8 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
 
 async function main() {
   const args = process.argv.slice(2);
-  let targetQuery = 'api automation testing remote';
-  let headlessArg = true;
+  let targetQuery = 'Senior QA Automation SDET Engineer Test Remote';
+  let headlessArg = false; // Default to false so you can see the browser window launch!
 
   args.forEach((arg) => {
     if (arg.startsWith('--target=')) {
@@ -148,7 +165,7 @@ async function main() {
 
   try {
     const saved = await runJobScraper(targetQuery, headlessArg);
-    console.log(`Successfully saved ${saved} new jobs to the database.`);
+    console.log(`🎉 Successfully saved ${saved} new jobs to the database.`);
     console.log('🏁 Scraping Pipeline Completed.');
   } finally {
     await pool.end();

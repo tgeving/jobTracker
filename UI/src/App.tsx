@@ -1,21 +1,149 @@
+import { useEffect, useState } from 'react';
 import { JobBuckets } from './constants/buckets';
 import { JobMetricsChart } from './components/jobMetricsChart';
 import { AddEditJobModal } from './components/AddEditJobModal';
 import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
 import { RunScraperModal } from './components/RunScraperModal';
 import { PaginationBar } from './components/PaginationBar';
-import { useJobs } from './hooks/useJobs';
+
+const API_BASE = 'http://localhost:8000';
 
 export default function App() {
-  const {
-    jobData, selectedBucket, setSelectedBucket, searchQuery, setSearchQuery, activeSearchTerm, setActiveSearchTerm,
-    loading, currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, showJobModal, setShowJobModal,
-    showScraperModal, setShowScraperModal, jobToDelete, setJobToDelete, setIsEditing,
-    setEditingJobId, setEditingJobTable, jobForm, setJobForm, scraperPlatform, setScraperPlatform,
-    scraperTarget, setScraperTarget, scraperHeadless, setScraperHeadless, scraping, metricsData,
-    filteredItems, totalPages, startIndex, currentTableItems, handleMoveJob, confirmDeleteJob,
-    handleSaveJob, handleRunScraper
-  } = useJobs();
+  const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
+  const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
+  
+  // 1. Default selected bucket to NewJobs instead of 'all'
+  const [selectedBucket, setSelectedBucket] = useState(JobBuckets.NewJobs);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchTerm, setActiveSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [showScraperModal, setShowScraperModal] = useState(false);
+  const [jobToDelete, setJobToDelete] = useState<any>(null);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingJobId, setEditingJobId] = useState<any>(null);
+  const [editingJobTable, setEditingJobTable] = useState<string>('');
+  const [jobForm, setJobForm] = useState({ company: '', position: '', date_applied: '', wfh: '', notes: '', job_link: '' });
+
+  const [scraperPlatform, setScraperPlatform] = useState('linkedin');
+  
+  // 3. Pre-fill wide-net scraper target keyword
+  const [scraperTarget, setScraperTarget] = useState('QA SDET Test Automation Remote');
+  
+  // 2. Default headless mode to false so the browser runs visually by default
+  const [scraperHeadless, setScraperHeadless] = useState(false);
+  
+  const [scraping, setScraping] = useState(false);
+
+  const datasetToCount = allJobsCache.length > 0 ? allJobsCache : jobData.items;
+  const metricsData = {
+    newJobs: datasetToCount.filter(j => j.table_name === JobBuckets.NewJobs || !j.table_name).length,
+    applied: datasetToCount.filter(j => j.table_name === JobBuckets.Applied).length,
+    waiting: datasetToCount.filter(j => j.table_name === JobBuckets.WaitingToHearBack).length,
+    pending: datasetToCount.filter(j => j.table_name === JobBuckets.Pending).length,
+    unresponsive: datasetToCount.filter(j => j.table_name === JobBuckets.Unresponsive).length,
+    declined: datasetToCount.filter(j => j.table_name === JobBuckets.Declined).length,
+    withdrew: datasetToCount.filter(j => j.table_name === JobBuckets.Withdrew).length,
+    disappointed: datasetToCount.filter(j => j.table_name === JobBuckets.Disappointed).length,
+  };
+
+  const fetchJobs = (bucketKey: string) => {
+    setLoading(true);
+    setCurrentPage(1);
+    const endpoint = bucketKey === 'all' ? `${API_BASE}/api/jobs/all` : `${API_BASE}/api/jobs/${bucketKey}`;
+
+    fetch(endpoint)
+      .then(res => res.json())
+      .then(data => { setJobData(data); setLoading(false); })
+      .catch(err => { console.error(err); setLoading(false); });
+
+    fetch(`${API_BASE}/api/jobs/all`)
+      .then(res => res.json())
+      .then(data => setAllJobsCache(data.items))
+      .catch(err => console.error(err));
+  };
+
+  useEffect(() => { fetchJobs(selectedBucket); }, [selectedBucket]);
+
+  const handleMoveJob = async (job: any, targetTable: string) => {
+    try {
+      const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
+      const res = await fetch(`${API_BASE}/api/jobs/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_table: sourceTable, target_table: targetTable, company: job.company || '', position: job.position || '', row_id: String(job.id) })
+      });
+      if (!res.ok) throw new Error('Failed to move job');
+      fetchJobs(selectedBucket);
+    } catch (err) { console.error(err); }
+  };
+
+  const confirmDeleteJob = async () => {
+    if (!jobToDelete) return;
+    const table = jobToDelete.table_name || selectedBucket;
+    try {
+      const res = await fetch(`${API_BASE}/api/jobs/${table}/${jobToDelete.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete job');
+      setJobToDelete(null);
+      fetchJobs(selectedBucket);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSaveJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (isEditing) {
+        const table = editingJobTable === 'all' ? JobBuckets.NewJobs : editingJobTable;
+        await fetch(`${API_BASE}/api/jobs/${table}/${editingJobId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(jobForm),
+        });
+      } else {
+        const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket;
+        await fetch(`${API_BASE}/api/jobs/${targetTable}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(jobForm),
+        });
+      }
+      setShowJobModal(false);
+      fetchJobs(selectedBucket);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleRunScraper = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScraping(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/scraper/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: scraperPlatform, target: scraperTarget, headless: scraperHeadless }),
+      });
+      if (!res.ok) throw new Error('Scraper failed');
+      setShowScraperModal(false);
+      setScraperTarget('QA SDET Test Automation Remote');
+      fetchJobs(selectedBucket);
+    } catch (err) { console.error(err); } finally { setScraping(false); }
+  };
+
+  const sourceDataset = activeSearchTerm ? allJobsCache : jobData.items;
+  const filteredItems = sourceDataset.filter(job => {
+    const q = activeSearchTerm.toLowerCase();
+    if (!q) return true;
+    return (job.company || '').toLowerCase().includes(q) || (job.position || '').toLowerCase().includes(q) || (job.notes || '').toLowerCase().includes(q);
+  }).sort((a, b) => b.id - a.id);
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentTableItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="container">
@@ -38,7 +166,7 @@ export default function App() {
         </button>
       </div>
 
-      <AddEditJobModal isOpen={showJobModal} isEditing={false} jobForm={jobForm} setJobForm={setJobForm} onClose={() => setShowJobModal(false)} onSave={handleSaveJob} />
+      <AddEditJobModal isOpen={showJobModal} isEditing={isEditing} jobForm={jobForm} setJobForm={setJobForm} onClose={() => setShowJobModal(false)} onSave={handleSaveJob} />
       <ConfirmDeleteModal jobToDelete={jobToDelete} onClose={() => setJobToDelete(null)} onConfirm={confirmDeleteJob} />
       <RunScraperModal isOpen={showScraperModal} scraperPlatform={scraperPlatform} setScraperPlatform={setScraperPlatform} scraperTarget={scraperTarget} setScraperTarget={setScraperTarget} scraperHeadless={scraperHeadless} setScraperHeadless={setScraperHeadless} scraping={scraping} onClose={() => setShowScraperModal(false)} onRun={handleRunScraper} />
 

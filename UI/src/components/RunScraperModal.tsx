@@ -1,3 +1,5 @@
+import React from 'react';
+
 interface RunScraperModalProps {
   isOpen: boolean;
   scraperPlatform: string;
@@ -42,14 +44,12 @@ export function RunScraperModal({
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#0f172a' }}>Search Target</label>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px', color: '#0f172a' }}>Search Target (Wide Net)</label>
             <input 
               type="text" 
-              placeholder="e.g. SDET or Senior QA Engineer" 
               value={scraperTarget}
               onChange={(e) => setScraperTarget(e.target.value)}
-              required
-              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#fff', color: '#0f172a' }}
             />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
