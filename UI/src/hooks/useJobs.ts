@@ -5,7 +5,7 @@ const API_BASE = 'http://localhost:8000';
 
 export function useJobs() {
   const [jobData, setJobData] = useState<{ total: number; items: any[] }>({ total: 0, items: [] });
-  const [allJobsCache, setAllJobsCache] = useState<any[]>([]);
+  const [allJobsCache] = useState<any[]>([]);
   const [selectedBucket, setSelectedBucket] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
