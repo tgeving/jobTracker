@@ -25,6 +25,10 @@ export default function App() {
   const [showScraperModal, setShowScraperModal] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<any>(null);
 
+  // Bulk selection and delete states
+  const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editingJobId, setEditingJobId] = useState<any>(null);
   const [editingJobTable, setEditingJobTable] = useState<string>('');
@@ -53,6 +57,7 @@ export default function App() {
   const fetchJobs = (bucketKey: string) => {
     setLoading(true);
     setCurrentPage(1);
+    setSelectedJobIds([]); 
     const endpoint = bucketKey === 'all' ? `${API_BASE}/api/jobs/all` : `${API_BASE}/api/jobs/${bucketKey}`;
 
     fetch(endpoint)
@@ -70,7 +75,7 @@ export default function App() {
 
   const handleMoveJob = async (job: any, targetTable: string) => {
     try {
-      const sourceTable = job.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
+      const sourceTable = job.table_name || ((selectedBucket as string) === 'all' ? JobBuckets.NewJobs : selectedBucket);
       const res = await fetch(`${API_BASE}/api/jobs/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,7 +88,7 @@ export default function App() {
 
   const confirmDeleteJob = async () => {
     if (!jobToDelete) return;
-    const table = jobToDelete.table_name || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
+    const table = jobToDelete.table_name || ((selectedBucket as string) === 'all' ? JobBuckets.NewJobs : selectedBucket);
     try {
       const res = await fetch(`${API_BASE}/api/jobs/${table}/${jobToDelete.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete job');
@@ -92,18 +97,61 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  const handleBulkDelete = async () => {
+    const table = selectedBucket === 'all' ? 'new_jobs_found' : selectedBucket;
+    const numericIds = selectedJobIds.map(id => Number(id));
+
+    try {
+      // Send table name in the URL path to completely avoid JSON model validation mismatches
+      const res = await fetch(`${API_BASE}/api/jobs/${table}/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          ids: numericIds 
+        }),
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        console.error('Bulk delete error:', errData);
+        throw new Error('Bulk delete failed');
+      }
+
+      setSelectedJobIds([]);
+      setShowBulkDeleteModal(false);
+      fetchJobs(selectedBucket);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSelectAllToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const allIds = currentTableItems.map(j => j.id);
+      setSelectedJobIds(allIds);
+    } else {
+      setSelectedJobIds([]);
+    }
+  };
+
+  const handleSelectJobToggle = (id: number) => {
+    setSelectedJobIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
   const handleSaveJob = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (isEditing) {
-        const table = editingJobTable || (selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket);
+        const table = editingJobTable || ((selectedBucket as string) === 'all' ? JobBuckets.NewJobs : selectedBucket);
         await fetch(`${API_BASE}/api/jobs/${table}/${editingJobId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(jobForm),
         });
       } else {
-        const targetTable = selectedBucket === 'all' ? JobBuckets.NewJobs : selectedBucket;
+        const targetTable = (selectedBucket as string) === 'all' ? JobBuckets.NewJobs : selectedBucket;
         await fetch(`${API_BASE}/api/jobs/${targetTable}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -152,6 +200,12 @@ export default function App() {
           Add New Job
         </button>
 
+        {selectedJobIds.length > 0 && (
+          <button type="button" onClick={() => setShowBulkDeleteModal(true)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}>
+            Delete Selected ({selectedJobIds.length})
+          </button>
+        )}
+
         <div style={{ display: 'flex', gap: '6px' }}>
           <input type="text" placeholder="Search all buckets" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { setActiveSearchTerm(searchQuery); setCurrentPage(1); } }} style={{ padding: '9px 14px', borderRadius: '6px', border: '1px solid #cbd5e1', width: '300px', fontSize: '14px' }} />
           <button type="button" onClick={() => { setActiveSearchTerm(searchQuery); setCurrentPage(1); }} style={{ background: '#475569', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: 500 }}>Search</button>
@@ -167,12 +221,28 @@ export default function App() {
       <ConfirmDeleteModal jobToDelete={jobToDelete} onClose={() => setJobToDelete(null)} onConfirm={confirmDeleteJob} />
       <RunScraperModal isOpen={showScraperModal} scraperPlatform={scraperPlatform} setScraperPlatform={setScraperPlatform} scraperTarget={scraperTarget} setScraperTarget={setScraperTarget} scraperHeadless={scraperHeadless} setScraperHeadless={setScraperHeadless} scraping={scraping} onClose={() => setShowScraperModal(false)} onRun={handleRunScraper} />
 
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="modal-content" style={{ background: '#fff', padding: '24px', borderRadius: '8px', width: '400px', textAlign: 'center' }}>
+            <h3>Confirm Bulk Delete</h3>
+            <p>Are you sure you want to delete {selectedJobIds.length} selected job(s)? This action cannot be undone.</p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px' }}>
+              <button type="button" onClick={() => setShowBulkDeleteModal(false)} style={{ background: '#cbd5e1', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={handleBulkDelete} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>Delete All Selected</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tabs">
-        <button type="button" className={selectedBucket === 'all' ? 'active' : ''} onClick={() => { setSelectedBucket('all'); setActiveSearchTerm(''); setSearchQuery(''); }}>
-          All
-        </button>
         {Object.entries(JobBuckets).map(([label, tableKey]) => (
-          <button key={tableKey} type="button" className={selectedBucket === tableKey ? 'active' : ''} onClick={() => { setSelectedBucket(tableKey); setActiveSearchTerm(''); setSearchQuery(''); }}>
+          <button 
+            key={tableKey} 
+            type="button" 
+            className={selectedBucket === tableKey ? 'active' : ''} 
+            onClick={() => { setSelectedBucket(tableKey); setActiveSearchTerm(''); setSearchQuery(''); }}
+          >
             {label.replace(/([A-Z])/g, ' $1').trim()}
           </button>
         ))}
@@ -193,6 +263,13 @@ export default function App() {
           <table className="job-table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    onChange={handleSelectAllToggle} 
+                    checked={currentTableItems.length > 0 && currentTableItems.every(j => selectedJobIds.includes(j.id))} 
+                  />
+                </th>
                 <th style={{ width: '50px', textAlign: 'center' }}>#</th>
                 <th>Company</th>
                 <th>Position</th>
@@ -208,6 +285,13 @@ export default function App() {
             <tbody>
               {currentTableItems.map((job, index) => (
                 <tr key={job.id || index}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedJobIds.includes(job.id)} 
+                      onChange={() => handleSelectJobToggle(job.id)} 
+                    />
+                  </td>
                   <td style={{ textAlign: 'center', color: '#64748b', fontWeight: 500 }}>{startIndex + index + 1}</td>
                   <td>{job.company}</td>
                   <td>{job.position}</td>
@@ -219,7 +303,7 @@ export default function App() {
                   <td>
                     <select defaultValue="" onChange={e => { if (e.target.value) { handleMoveJob(job, e.target.value); e.target.value = ''; } }}>
                       <option value="" disabled>Move to...</option>
-                      {Object.entries(JobBuckets).map(([l, k]) => <option key={k} value={k}>{l.replace(/([A-Z])/g, ' $1').trim()}</option>)}
+                      {Object.entries(JobBuckets).filter(([_, k]) => k !== 'all').map(([l, k]) => <option key={k} value={k}>{l.replace(/([A-Z])/g, ' $1').trim()}</option>)}
                     </select>
                   </td>
                   <td>

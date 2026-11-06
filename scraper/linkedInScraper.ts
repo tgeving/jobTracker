@@ -4,6 +4,34 @@ import { ScrapedJob } from './jobscraper';
 export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<ScrapedJob[]> {
   console.log(`--- Scraping LinkedIn Jobs for query: "${searchQuery}" (Max 4 Pages) ---`);
 
+  // Explicitly construct and force navigation to the target search URL
+  const encodedQuery = encodeURIComponent(searchQuery);
+  const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodedQuery}`;
+
+  console.log(`--- Navigating directly to search feed: ${searchUrl} ---`);
+  await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(4000);
+
+  // Handle any login prompts if they popped up on the way
+  const emailInput = page.locator('input#session_key, input[name="session_key"], input[placeholder="Email or phone"]');
+  const passwordInput = page.locator('input#session_password, input[name="session_password"], input[placeholder="Password"]');
+  const submitButton = page.locator('button[type="submit"], button:has-text("Sign in")').last();
+
+  if (await emailInput.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+    console.log('🔐 Login prompt detected during navigation. Entering credentials...');
+    await emailInput.first().click();
+    await emailInput.first().fill(process.env.LINKEDIN_EMAIL || '');
+    await passwordInput.first().click();
+    await passwordInput.first().fill(process.env.LINKEDIN_PASSWORD || '');
+    await submitButton.click();
+    await page.waitForTimeout(5000);
+    
+    // Re-navigate to the job search URL just in case logging in redirected to the feed
+    console.log(`🔄 Re-navigating to jobs page post-login...`);
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(4000);
+  }
+
   try {
     // Wait for the main results container to load
     await page.waitForSelector('.jobs-search-results-list, .scaffold-layout__list, main', { timeout: 15000 });
@@ -32,21 +60,40 @@ export async function scrapeLinkedIn(page: Page, searchQuery: string): Promise<S
         const linkElement = card.locator('a[href*="/jobs/view/"]').first();
         if (await linkElement.count() === 0) continue;
 
-        // Explicitly target title and company classes to prevent field swaps
-        const titleElement = card.locator('.job-card-list__title, .base-search-card__title, .job-card-container__link').first();
+        // Strictly target actual job title elements first to avoid grabbing description blocks
+        const titleElement = card.locator('.job-card-list__title, .base-search-card__title, a.job-card-container__link').first();
         const companyElement = card.locator('.job-card-container__company-name, .base-search-card__subtitle, .artdeco-entity-lockup__subtitle').first();
 
         if (await titleElement.count() === 0) continue;
 
-        let title = (await titleElement.innerText()).trim();
+        let title = '';
+        try {
+          title = (await titleElement.innerText()).trim();
+        } catch {
+          title = (await titleElement.textContent() || '').trim();
+        }
         title = title.split('\n')[0].replace(/with verification/gi, '').trim();
 
-        // Skip if it grabbed a non-job title link
-        if (!title || title.toLowerCase() === 'view job' || title.length < 3) continue;
+        // Validation: Skip if the text is clearly a description block, too long, or invalid
+        if (
+          !title ||
+          title.toLowerCase() === 'view job' ||
+          title.length < 3 ||
+          title.length > 90 || // Job titles shouldn't be whole paragraphs
+          title.toLowerCase().includes('who we are') ||
+          title.toLowerCase().includes('this position is') ||
+          title.toLowerCase().includes('partner company')
+        ) {
+          continue;
+        }
 
         let company = 'Unknown Company';
         if (await companyElement.count() > 0) {
-          company = (await companyElement.innerText()).trim().split('\n')[0];
+          try {
+            company = (await companyElement.innerText()).trim().split('\n')[0];
+          } catch {
+            company = (await companyElement.textContent() || '').trim().split('\n')[0];
+          }
         }
 
         let jobLink = (await linkElement.getAttribute('href')) || '';

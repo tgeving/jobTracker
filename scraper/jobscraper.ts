@@ -5,7 +5,6 @@ import { chromium } from 'playwright';
 import { Pool } from 'pg';
 import { scrapeLinkedIn } from './linkedInScraper';
 
-// Load variables from the root .env file
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const pool = new Pool({
@@ -23,8 +22,8 @@ export interface ScrapedJob {
   wfh: string;
 }
 
-// Historical career pipeline tables to check against duplicates (excluding new_jobs_found)
-const HISTORICAL_TABLES = [
+const ALL_TRACKED_TABLES = [
+  'new_jobs_found',
   'applied',
   'withdrew',
   'waiting_to_hear_back',
@@ -33,6 +32,15 @@ const HISTORICAL_TABLES = [
   'declined',
   'disappointed',
 ];
+
+// Helper to normalize strings: lowercase and strip punctuation (e.g. "Sr." vs "Sr")
+function normalizeString(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/gi, '') // Removes periods, commas, dashes, special chars
+    .replace(/\s+/g, ' ')      // Collapses multiple spaces into one
+    .trim();
+}
 
 export async function runJobScraper(searchQuery: string, headlessMode: boolean) {
   console.log(`🚀 Starting Job Scraping Pipeline with query: "${searchQuery}"`);
@@ -47,7 +55,6 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
   });
 
   const page = browserContext.pages()[0] ?? (await browserContext.newPage());
-
   const client = await pool.connect();
   let newJobsSavedCount = 0;
 
@@ -59,75 +66,37 @@ export async function runJobScraper(searchQuery: string, headlessMode: boolean) 
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    const currentTitle = await page.title();
-    const currentUrl = page.url();
-    console.log(`🌐 Current Page Title: "${currentTitle}" | URL: ${currentUrl}`);
-
-    const signInWithEmailBtn = page
-      .locator('button:has-text("Sign in with Email"), button:has-text("Sign in")')
-      .filter({ hasText: /email|sign in/i });
-
-    if (await signInWithEmailBtn.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      console.log('🔑 Sign-in prompt detected. Attempting automatic login...');
-      await signInWithEmailBtn.first().click();
-      await page.waitForTimeout(2000);
-    }
-
-    const emailInput = page.locator('input#session_key, input[name="session_key"], input[placeholder="Email or phone"]');
-    const passwordInput = page.locator('input#session_password, input[name="session_password"], input[placeholder="Password"]');
-    const submitButton = page.locator('button[type="submit"], button:has-text("Sign in")').last();
-
-    if (await emailInput.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      await emailInput.first().click();
-      await emailInput.first().fill(process.env.LINKEDIN_EMAIL || '');
-      await passwordInput.first().click();
-      await passwordInput.first().fill(process.env.LINKEDIN_PASSWORD || '');
-      await submitButton.click();
-      await page.waitForTimeout(5000);
-      console.log('🔐 Login credentials submitted.');
-    } else {
-      console.log('✅ Session profile loaded successfully (No login form needed).');
-    }
-
     const linkedinJobs = await scrapeLinkedIn(page, searchQuery);
     console.log(`📊 Evaluation Phase: Total unique jobs extracted from LinkedIn = ${linkedinJobs.length}`);
 
-    if (linkedinJobs.length === 0) {
-      console.log('⚠️ WARNING: 0 jobs were returned by scrapeLinkedIn.');
-    }
-
     for (const job of linkedinJobs) {
-      let existsInHistory = false;
-      const cleanCompany = (job.company || '').trim().toLowerCase();
-      const cleanPosition = (job.position || '').trim().toLowerCase();
+      let existsAnywhere = false;
+      const cleanCompany = normalizeString(job.company);
+      const cleanPosition = normalizeString(job.position);
 
       if (!cleanCompany || !cleanPosition) continue;
 
-      // Check against historical decision tables only
-      for (const table of HISTORICAL_TABLES) {
+      // Check against ALL historical tables with normalized comparison
+      for (const table of ALL_TRACKED_TABLES) {
         try {
-          const queryCheck = `
-            SELECT 1
-            FROM "${table}"
-            WHERE LOWER(TRIM(company)) = $1
-              AND LOWER(TRIM(position)) = $2
-            LIMIT 1
-          `;
+          const res = await client.query(`SELECT company, position FROM "${table}"`);
+          
+          const isDuplicate = res.rows.some(row => 
+            normalizeString(row.company) === cleanCompany && 
+            normalizeString(row.position) === cleanPosition
+          );
 
-          const res = await client.query(queryCheck, [cleanCompany, cleanPosition]);
-
-          if (res.rows.length > 0) {
-            existsInHistory = true;
-            console.log(`-> Duplicate skipped (Found in historical table "${table}"): ${job.company} - ${job.position}`);
+          if (isDuplicate) {
+            existsAnywhere = true;
+            console.log(`-> Duplicate skipped (Normalized match in "${table}"): ${job.company} - ${job.position}`);
             break;
           }
         } catch (tableErr) {
-          // Skip missing table errors gracefully to prevent crashes
-          console.warn(`⚠️ Warning: Could not query table "${table}":`, tableErr);
+          // Skip missing table errors gracefully
         }
       }
 
-      if (existsInHistory) continue;
+      if (existsAnywhere) continue;
 
       try {
         const insertQuery = `
@@ -169,7 +138,6 @@ async function main() {
   try {
     const saved = await runJobScraper(targetQuery, headlessArg);
     console.log(`🎉 Successfully saved ${saved} new jobs to the database.`);
-    console.log('🏁 Scraping Pipeline Completed.');
   } finally {
     await pool.end();
   }

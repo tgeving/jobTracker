@@ -57,6 +57,10 @@ class MoveJobModel(BaseModel):
   row_id: str
 
 
+class BulkDeleteModel(BaseModel):
+  ids: list[int]
+
+
 class ScraperModel(BaseModel):
   platform: str
   target: str
@@ -266,6 +270,32 @@ def delete_job(table_name: str, job_id: int):
     conn.close()
 
 
+@app.post("/api/jobs/{table_name}/bulk-delete")
+def bulk_delete_jobs(table_name: str, data: BulkDeleteModel):
+  if table_name not in VALID_TABLES:
+    raise HTTPException(status_code=400, detail="Invalid table name")
+  
+  if not data.ids:
+    raise HTTPException(status_code=400, detail="No IDs provided for bulk deletion")
+
+  conn = get_db_connection()
+  cursor = conn.cursor()
+  try:
+    cursor.execute(
+        f'DELETE FROM "{table_name}" WHERE id = ANY(%s);',
+        (data.ids,)
+    )
+    conn.commit()
+    deleted_count = cursor.rowcount
+    return {"success": True, "deletedCount": deleted_count}
+  except Exception as e:
+    conn.rollback()
+    raise HTTPException(status_code=500, detail=str(e))
+  finally:
+    cursor.close()
+    conn.close()
+
+
 # --- SCRAPER TRIGGER ROUTE (Using tsx) ---
 @app.post("/api/scraper/run")
 def run_scraper(data: ScraperModel):
@@ -274,16 +304,10 @@ def run_scraper(data: ScraperModel):
         os.path.join(os.path.dirname(__file__), "../scraper/jobscraper.ts")
     )
 
-    # Fallback to the wide-net search target if data.target is missing
     target_query = (
         data.target
         if data.target and data.target.strip()
         else "Senior QA Automation SDET Engineer Test Remote"
-    )
-
-    print(
-        f"🚀 Triggering scraper for target: '{target_query}' (headless:"
-        f" {data.headless})"
     )
 
     cmd = (
@@ -320,4 +344,3 @@ if __name__ == "__main__":
   import uvicorn
 
   uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
-  
